@@ -1,0 +1,21 @@
+# CSA Integration Requirements
+
+# Core CSA dependencies
+torch>=2.4.0
+transformers>=4.30.0
+accelerate
+pyturboquant
+
+# Integration dependencies
+flask>=2.0.0
+requests>=2.25.0
+
+# Optional: For vLLM integration
+# vllm>=0.4.0  # Install separately due to complexity
+
+# Optional: For visualization
+matplotlib>=3.5.0
+
+# Development dependencies
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
