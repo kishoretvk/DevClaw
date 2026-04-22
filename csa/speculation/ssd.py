@@ -2,6 +2,7 @@
 
 import torch
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from typing import List, Dict, Tuple
 try:
     from ssd import LLM, SamplingParams
@@ -182,11 +183,12 @@ class SSDSpeculator:
         """
         accepted = []
         current_kv = skeleton_kv
+        device = next(target_model.parameters()).device
 
         for i, token in enumerate(speculated_tokens):
             # Forward target with current compressed state
             with torch.no_grad():
-                outputs = target_model(torch.tensor([[token]], device="cuda"), past_key_values=current_kv)
+                outputs = target_model(torch.tensor([[token]], device=device), past_key_values=current_kv)
                 next_logits = outputs.logits[:, -1, :]
                 predicted = torch.argmax(next_logits, dim=-1).item()
 

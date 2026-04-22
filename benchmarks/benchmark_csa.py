@@ -63,16 +63,18 @@ def benchmark_csa():
 
     # CSA generation with profiling
     print("Running CSA generation with profiling...")
-    csa_mem = psutil.virtual_memory().used / 1024 / 1024  # MB
+    csa_mem = psutil.virtual_memory().used / 1024 / 1024 # MB
 
     # Enable detailed profiling for CSA
-    csa_text = csa_engine.generate(prompt, max_new_tokens=MAX_TOKENS, enable_profiling=True)
+    csa_start_time = time.time()
+    csa_text = csa_engine.generate(prompt, max_new_tokens=max_tokens, enable_profiling=True)
+    csa_time = time.time() - csa_start_time
 
     # Results
     print("\n=== Results ===")
-    print(".2f")
-    print(".2f")
-    print(".1f")
+    print(f"Baseline time: {baseline_time:.2f}s")
+    print(f"CSA time: {csa_time:.2f}s")
+    print(f"Speedup: {baseline_time/csa_time:.1f}x")
 
     print(f"\nBaseline memory: {baseline_mem} MB")
     print(f"CSA memory: {csa_mem:.0f} MB")

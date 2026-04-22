@@ -1,7 +1,7 @@
 # TurboQuant quantization module
 
 import torch
-from pyturboquant.core import MSEQuantizer
+from .turboquant import MSEQuantizer
 
 class TurboQuantCache:
     def __init__(self, dim, bits=3, seed=42, device="cuda"):
