@@ -1,0 +1,23 @@
+# Notebook Requirements for CSA Testing
+
+# Core CSA dependencies
+csa-llm>=0.1.0
+
+# Data science and visualization
+pandas>=1.5.0
+matplotlib>=3.5.0
+seaborn>=0.11.0
+jupyter>=1.0.0
+
+# Integration testing
+requests>=2.25.0
+flask>=2.0.0
+
+# Optional: GPU monitoring
+# GPUtil>=1.4.0
+
+# Optional: For Ollama integration
+# ollama>=0.1.0
+
+# Optional: For vLLM integration
+# vllm>=0.4.0
