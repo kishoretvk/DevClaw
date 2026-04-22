@@ -1,6 +1,7 @@
 # Core CSA engine
 
 import torch
+import time
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from ..compression import AttentionMatcher, FP8Quantizer
 from ..quantization import TurboQuantCache

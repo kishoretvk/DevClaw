@@ -213,7 +213,8 @@ class SSDSpeculator:
 
     def _fallback_speculate(self, current_tokens: List[int], max_new_tokens: int) -> List[int]:
         """Fallback speculation using standard transformers."""
-        input_ids = torch.tensor([current_tokens], device="cuda")
+        device = next(self.draft_model.parameters()).device
+        input_ids = torch.tensor([current_tokens], device=device)
 
         with torch.no_grad():
             outputs = self.draft_model.generate(
