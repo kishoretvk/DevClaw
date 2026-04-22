@@ -83,8 +83,8 @@ class CSAEngine:
                 # Simple mode: just compress prompt and generate normally
                 result = self._simple_generate(input_ids, max_new_tokens)
             else:
-        # Full CSA mode with SSD
-        result = self._full_generate(input_ids, max_new_tokens)
+                # Full CSA mode with SSD
+                result = self._full_generate(input_ids, max_new_tokens)
 
         if enable_profiling:
             summary = profiler.end_profiling()
@@ -153,9 +153,10 @@ class CSAEngine:
             compressed_seq_len = skeleton_kv[0][0].shape[2]
             compression_ratio = original_seq_len / compressed_seq_len if compressed_seq_len > 0 else 1
 
-            print(f"✅ Compressed from {original_seq_len} to {compressed_seq_len} tokens per layer ({compression_ratio:.1f}x compression)")
+            print(f"Compressed from {original_seq_len} to {compressed_seq_len} tokens per layer ({compression_ratio:.1f}x compression)")
         else:
-            print("⏭️  Skipping compression (using cached skeleton)"            skeleton_kv = self.skeleton_kv
+            print("Skipping compression (using cached skeleton)")
+            skeleton_kv = self.skeleton_kv
 
         # For demonstration, generate without compressed cache (since FP8 issue)
         # In full implementation, need to handle mixed precision
