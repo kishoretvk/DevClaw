@@ -2,7 +2,12 @@
 
 """
 CSA Benchmark Suite
-Proves 4-6x speedup with minimal quality degradation
+Tests compression algorithms and generation quality
+
+NOTE: This benchmark shows current implementation status:
+- KV cache compression algorithm: WORKING (verified 83% reduction)
+- Generation with compressed cache: NOT YET IMPLEMENTED
+- Speedup claims: NOT YET VERIFIED (requires compressed generation)
 """
 
 import time
