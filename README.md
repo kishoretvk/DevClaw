@@ -46,7 +46,16 @@ python benchmarks/benchmark_csa.py
 
 # Run quality tests
 python benchmarks/benchmark_quality.py
+
+# Generate performance visualizations
+python benchmarks/visualizer.py
 ```
+
+### 📊 Charts & Reports
+The `docs/` directory contains:
+- **Performance Charts**: Speedup, memory, and quality visualizations
+- **Benchmark Report**: Comprehensive analysis and projections
+- **ASCII Charts**: Text-based visualizations for terminals
 
 ## ✨ Key Features
 
@@ -60,15 +69,70 @@ python benchmarks/benchmark_quality.py
 ## 🏗️ Architecture
 
 ```
-CSA Framework
-├── 📦 Attention Matching    # KV cache compression
-├── 🔢 TurboQuant          # 3-bit quantization
-├── ⚡ SSD Engine          # Parallel speculation
-├── 🔄 Background Recovery # Accuracy maintenance
-└── 🎯 CSA Engine         # Unified pipeline
+CSA Framework Architecture
+═══════════════════════════════════════════════
+
+┌─────────────────────────────────────────────┐
+│               CSA Engine                    │
+│         (Main Orchestration)                │
+└─────────────────┬───────────────────────────┘
+                  │
+        ┌─────────┴─────────┐
+        │                   │
+┌───────▼───────┐   ┌───────▼───────┐
+│ Attention     │   │   TurboQuant  │
+│ Matching      │   │   (3-bit)     │
+│ (Compress)    │   │   (Quantize)  │
+└───────┬───────┘   └───────┬───────┘
+        │                   │
+        └─────────┬─────────┘
+                  │
+        ┌─────────┴─────────┐
+        │                   │
+┌───────▼───────┐   ┌───────▼───────┐
+│     SSD       │   │ Background    │
+│   Engine      │   │  Recovery     │
+│ (Speculate)   │   │  (Refine)     │
+└───────────────┘   └───────────────┘
+
+Data Flow: Prompt → Compress → Quantize → Speculate → Generate → Recover
 ```
 
-## 📊 Demo Results
+### 📈 Performance Projections
+
+```
+Expected Speedup vs Baseline Autoregressive
+═══════════════════════════════════════════════
+
+6.0 │                                       █
+    │                                       █
+5.0 │                                       █
+    │                                       █
+4.0 │                                       █
+    │                                   █   █
+3.0 │                                   █   █
+    │                               █   █   █
+2.0 │                               █   █   █
+    │                           █   █   █   █
+1.0 │███████████████████████████ █ █ █ █ █ █ █
+    └─────────────────────────────────────────
+     Baseline  CSA+Comp  CSA+Quant CSA+SSD  Full CSA
+     (1x)      (1.5x)    (2x)      (3x)     (4-6x)
+```
+
+## 📊 Demo Results & Visualizations
+
+### Performance Charts
+> 📈 [View all charts](./docs/)
+
+![CSA Speedup Chart](./docs/speedup_chart.png)
+*Figure 1: Expected speedup progression through CSA components*
+
+![Memory Reduction](./docs/memory_reduction.png)
+*Figure 2: Memory usage breakdown showing dramatic KV cache reduction*
+
+![Quality Trade-off](./docs/quality_tradeoff.png)
+*Figure 3: Speed vs quality trade-off analysis*
 
 ### Current Benchmarks (GPT-2, CPU)
 | Metric | Baseline | CSA | Improvement |
@@ -76,6 +140,11 @@ CSA Framework
 | KV Cache Size | 6 tokens/layer | 1 token/layer | **83% reduction** |
 | Generation Quality | 20 tokens | 20-22 tokens | ✅ Maintained |
 | Memory Usage | Baseline | Minimal overhead | ✅ Efficient |
+
+### 📋 Detailed Benchmark Report
+📄 [Complete Benchmark Report](./docs/benchmark_report.md)
+
+Includes performance projections, memory analysis, quality metrics, and implementation recommendations.
 
 ### 🏃‍♂️ Performance Targets
 For full 4-6x speedup demonstration, requires:
