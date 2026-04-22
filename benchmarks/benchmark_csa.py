@@ -61,15 +61,12 @@ def benchmark_csa():
     baseline_text = baseline_tokenizer.decode(baseline_output[0], skip_special_tokens=True)
     baseline_tokens = baseline_output[0][len(input_ids[0]):]
 
-    # CSA generation
-    print("Running CSA generation...")
+    # CSA generation with profiling
+    print("Running CSA generation with profiling...")
     csa_mem = psutil.virtual_memory().used / 1024 / 1024  # MB
 
-    start_time = time.time()
-
-    csa_text = csa_engine.generate(prompt, max_new_tokens=max_tokens)
-
-    csa_time = time.time() - start_time
+    # Enable detailed profiling for CSA
+    csa_text = csa_engine.generate(prompt, max_new_tokens=MAX_TOKENS, enable_profiling=True)
 
     # Results
     print("\n=== Results ===")
