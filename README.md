@@ -2,7 +2,7 @@
 
 > A training-free framework for **4–6× faster LLM inference** with minimal memory overhead
 
-[![GitHub Repository](https://img.shields.io/badge/GitHub-csa--llm-blue)](https://github.com/kishoretvk/csa-llm)
+[![GitHub Repository](https://img.shields.io/badge/GitHub-DevClaw-blue)](https://github.com/kishoretvk/DevClaw)
 [![Python](https://img.shields.io/badge/Python-3.12+-green)](https://python.org)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.4+-red)](https://pytorch.org)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](./LICENSE)
@@ -32,12 +32,66 @@ print(text)  # Shows compression stats and generated text
 
 # Full CSA mode (requires GPU + large models)
 engine = CSAEngine(
-    target_model="meta-llama/Llama-3-70b",
-    draft_model="meta-llama/Llama-3-8b",
+    target_model="meta-llama/Llama-2-7b-hf",
+    draft_model="meta-llama/Llama-2-7b-hf",  # Same model for SSD
     use_speculation=True
 )
 text = engine.generate("Your prompt here", max_new_tokens=100)
 ```
+
+## 📚 Tutorials & Integration Guides
+
+### 🎯 Getting Started Tutorial
+**[📖 Complete Getting Started Guide](./tutorials/getting_started.md)** - 5-minute hands-on tutorial
+
+Quick Start Steps:
+1. **[Installation Guide](./integration_guide.md#quick-start)**
+2. **[Basic CSA Usage](./examples/basic_usage.py)**
+3. **[Performance Benchmarking](./benchmarks/benchmark_csa.py)**
+
+### 🔗 Integration Tutorials
+
+#### Ollama Integration
+```bash
+# 1. Install and setup Ollama
+python setup.py ollama
+
+# 2. Run integration demo
+python integration_examples.py
+```
+
+#### vLLM Integration
+```bash
+# 1. Setup vLLM (requires GPU)
+python setup.py vllm
+
+# 2. Start vLLM server
+python -m vllm.entrypoints.openai.api_server --model gpt2
+
+# 3. Test integration
+python integration_examples.py
+```
+
+#### REST API Server
+```bash
+# Start CSA integration server
+python integration_server.py
+
+# API available at http://localhost:5000
+curl -X POST http://localhost:5000/generate/csa \\
+  -H "Content-Type: application/json" \\
+  -d '{"prompt": "Hello world", "max_tokens": 50}'
+```
+
+### 📖 Detailed Guides
+- **[Complete Integration Guide](./integration_guide.md)** - Ollama, vLLM, custom engines
+- **[Setup Automation](./setup.py)** - Automated installation for different platforms
+- **[API Reference](./integration_guide.md#production-deployment)** - REST API documentation
+
+### 🧪 Example Projects
+- **[Basic Usage](./examples/basic_usage.py)** - Simple CSA demonstration
+- **[Integration Examples](./integration_examples.py)** - Multi-engine demos
+- **[Benchmark Suite](./benchmarks/)** - Performance testing tools
 
 ### Benchmarking
 ```bash
@@ -50,6 +104,44 @@ python benchmarks/benchmark_quality.py
 # Generate performance visualizations
 python benchmarks/visualizer.py
 ```
+
+## 🔗 Integration with Inference Engines
+
+CSA can be integrated with popular inference engines:
+
+### Ollama Integration
+```bash
+# Set up Ollama
+python setup.py ollama
+
+# Test integration
+python integration_examples.py
+```
+
+### vLLM Integration
+```bash
+# Set up vLLM
+python setup.py vllm
+
+# Start vLLM server
+python -m vllm.entrypoints.openai.api_server --model gpt2 --host 0.0.0.0 --port 8000
+
+# Test integration
+python integration_examples.py
+```
+
+### REST API Server
+```bash
+# Start CSA integration server
+python integration_server.py
+
+# API endpoints available at http://localhost:5000
+# - POST /generate/csa     - Direct CSA generation
+# - POST /generate/ollama  - Ollama with CSA preprocessing
+# - POST /generate/vllm    - vLLM with CSA preprocessing
+```
+
+📖 **[Complete Integration Guide](./integration_guide.md)** - Detailed setup for Ollama, vLLM, and custom engines
 
 ### 📊 Charts & Reports
 The `docs/` directory contains:
