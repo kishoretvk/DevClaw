@@ -105,25 +105,26 @@ def test_score_accumulation():
     k_new = torch.randn(1, 8, 1, 64)
     v_new = torch.randn(1, 8, 1, 64)
     
+    # Set all heads to 1.0 so mean over 8 heads = 1.0
     scores = torch.zeros(1, 8, 1, 11)
-    scores[0, 0, 0, 0] = 1.0
+    scores[0, :, 0, 0] = 1.0  # Mean over 8 heads = 1.0
     
     cache.update(0, (k_new, v_new), scores)
     
-    # Score at position 0 should be accumulated
-    assert cache.detail_scores[0][0] == 1.0
+    # Score at position 0 should be accumulated (mean = 1.0)
+    assert abs(cache.detail_scores[0][0].item() - 1.0) < 0.01
     
     # Add another token
     k_new2 = torch.randn(1, 8, 1, 64)
     v_new2 = torch.randn(1, 8, 1, 64)
     
     scores2 = torch.zeros(1, 8, 1, 12)
-    scores2[0, 0, 0, 0] = 0.5
+    scores2[0, :, 0, 0] = 0.5  # Mean over 8 heads = 0.5
     
     cache.update(0, (k_new2, v_new2), scores2)
     
-    # Score at position 0 should be accumulated (1.0 + 0.5)
-    assert cache.detail_scores[0][0] == 1.5
+    # Score at position 0 should be accumulated (1.0 + 0.5 = 1.5)
+    assert abs(cache.detail_scores[0][0].item() - 1.5) < 0.01
 
 
 def test_memory_stats():
@@ -179,7 +180,7 @@ def test_per_layer_independence():
     """Test that each layer has independent cache."""
     cache = DynamicHierarchicalCache(
         skeleton_budget=20,
-        detail_budget=10,
+        detail_budget=100,  # Large enough to avoid eviction
         recent_window=5,
         num_layers=2
     )
@@ -197,8 +198,8 @@ def test_per_layer_independence():
     
     cache.update(0, (k_new, v_new), scores)
     
-    # Layer 0 should have 21 tokens
+    # Layer 0 should have 21 tokens (no eviction with budget=100)
     assert cache.detail_kv[0][0].shape[2] == 21
     
-    # Layer 1 should still have 20 tokens
+    # Layer 1 should still have 20 tokens (unchanged)
     assert cache.detail_kv[1][0].shape[2] == 20
