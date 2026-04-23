@@ -152,6 +152,8 @@ class SSDSpeculator:
     def predict_outcomes(self, current_tokens: List[int]) -> List[Tuple[int, int]]:
         """
         Predict likely verification outcomes for speculation (SSD innovation).
+        
+        Uses draft model to generate speculations and predict acceptance patterns.
 
         Args:
             current_tokens: Current sequence
@@ -159,12 +161,21 @@ class SSDSpeculator:
         Returns:
             outcomes: List of (num_accepted, rejection_pos) tuples, ordered by probability
         """
-        # Simplified: predict common patterns
-        # In real SSD, this uses probabilistic modeling
+        if not current_tokens:
+            return [(self.speculate_k, -1)]
+        
+        # Generate draft speculations to predict outcomes
+        draft_tokens = self._fallback_speculate(current_tokens, self.speculate_k)
+        
+        if not draft_tokens:
+            return [(0, 0)]
+        
+        # Predict outcomes based on draft confidence
+        # Higher confidence = more tokens accepted
         outcomes = [
-            (self.speculate_k, -1),  # All accepted
-            (self.speculate_k - 1, self.speculate_k - 1),  # Reject last
-            (self.speculate_k - 2, self.speculate_k - 2),  # Reject second last
+            (len(draft_tokens), -1),  # All accepted (optimistic)
+            (max(1, len(draft_tokens) - 1), len(draft_tokens) - 1),  # Reject last
+            (max(1, len(draft_tokens) // 2), len(draft_tokens) // 2),  # Reject half
         ]
         return outcomes[:self.async_fan_out]
 

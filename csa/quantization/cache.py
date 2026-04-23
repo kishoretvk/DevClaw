@@ -27,12 +27,13 @@ class TurboQuantCache:
         
         self.cache.append((quantized_k, quantized_v))
     
-    def get(self, idx):
+    def get(self, idx, original_shape=None):
         """
         Get dequantized KV at index.
         
         Args:
             idx: Index in cache
+            original_shape: Optional original shape to reshape back to (batch, heads, seq, dim)
         
         Returns:
             kv: Dequantized (key, value) tensors
@@ -40,6 +41,12 @@ class TurboQuantCache:
         quantized_k, quantized_v = self.cache[idx]
         k = self.k_quantizer.dequantize(quantized_k)
         v = self.v_quantizer.dequantize(quantized_v)
+        
+        # Reshape back to original shape if provided
+        if original_shape is not None:
+            k = k.view(original_shape)
+            v = v.view(original_shape)
+        
         return (k, v)
     
     def apply_residual(self, idx, residual_k, residual_v):

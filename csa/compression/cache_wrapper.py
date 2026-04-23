@@ -67,21 +67,35 @@ class CompressedKVCache:
         # This is a simple approach - more sophisticated methods possible
         target_size = self.original_seq_len
         
-        # Interpolate along sequence dimension
-        # Shape: (batch, heads, seq, dim) -> (batch, heads, new_seq, dim)
-        decomp_k = F.interpolate(
-            comp_k.transpose(2, 3),  # (batch, heads, dim, seq)
-            size=target_size,
-            mode='linear',
-            align_corners=True
-        ).transpose(2, 3)  # Back to (batch, heads, seq, dim)
+        # For 4D tensors (batch, heads, seq, dim), we need to use bilinear interpolation
+        # by treating (batch*heads) as batch and dim as channels
+        # Reshape: (batch, heads, seq, dim) -> (batch*heads, 1, seq, dim)
+        batch_heads = batch * num_heads
         
-        decomp_v = F.interpolate(
-            comp_v.transpose(2, 3),
-            size=target_size,
-            mode='linear',
+        # Reshape keys for bilinear interpolation
+        k_reshaped = comp_k.reshape(batch_heads, 1, comp_seq, head_dim)
+        v_reshaped = comp_v.reshape(batch_heads, 1, comp_seq, head_dim)
+        
+        # Use bilinear interpolation to upsample sequence dimension
+        # We want to expand from comp_seq to target_size along the seq dimension (height)
+        # while keeping dim (width) the same
+        decomp_k_reshaped = F.interpolate(
+            k_reshaped,
+            size=(target_size, head_dim),  # (height=seq, width=dim)
+            mode='bilinear',
             align_corners=True
-        ).transpose(2, 3)
+        )
+        
+        decomp_v_reshaped = F.interpolate(
+            v_reshaped,
+            size=(target_size, head_dim),
+            mode='bilinear',
+            align_corners=True
+        )
+        
+        # Reshape back: (batch*heads, 1, new_seq, dim) -> (batch, heads, new_seq, dim)
+        decomp_k = decomp_k_reshaped.reshape(batch, num_heads, target_size, head_dim)
+        decomp_v = decomp_v_reshaped.reshape(batch, num_heads, target_size, head_dim)
         
         # Ensure shapes are correct
         assert decomp_k.shape == (batch, num_heads, target_size, head_dim), \
