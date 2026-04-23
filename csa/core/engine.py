@@ -4,6 +4,7 @@ import torch
 import time
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from ..compression import AttentionMatcher, FP8Quantizer
+from ..compression.cache_wrapper import CompressedKVCache
 from ..quantization import TurboQuantCache
 try:
     from ..speculation.ssd import SSDSpeculator
@@ -121,7 +122,7 @@ class CSAEngine:
         return True
 
     def _simple_generate(self, input_ids, max_new_tokens):
-        """Simple generation with compression."""
+        """Simple generation with compression - NOW USING COMPRESSED CACHE!"""
         seq_length = input_ids.shape[1]
 
         # Prefill phase
@@ -159,15 +160,47 @@ class CSAEngine:
             print("Skipping compression (using cached skeleton)")
             skeleton_kv = self.skeleton_kv
 
-        # For demonstration, generate without compressed cache (since FP8 issue)
-        # In full implementation, need to handle mixed precision
-        with profile_component("token_generation", {"max_tokens": max_new_tokens, "compressed_cache": skeleton_kv is not None}):
-            generated_ids = self.target_model.generate(
-                input_ids,
-                max_new_tokens=max_new_tokens,
-                do_sample=True,
-                temperature=0.7
+        # Use compressed cache for generation!
+        if skeleton_kv is not None:
+            print("🚀 Using COMPRESSED KV cache for generation!")
+            
+            # Create compressed cache wrapper
+            original_seq_len = full_kv[0][0].shape[2] if should_compress else self.skeleton_kv[0][0].shape[2] * self.matcher.compression_ratio
+            
+            compressed_cache = CompressedKVCache(
+                compressed_kv=skeleton_kv,
+                original_seq_len=original_seq_len,
+                compression_ratio=self.matcher.compression_ratio,
+                quantizer=self.quantizer,
+                device=self.target_model.device
             )
+            
+            # Decompress to standard format for model.generate()
+            # This maintains compatibility while storing compressed in memory
+            with profile_component("decompress_for_generation"):
+                standard_cache = compressed_cache.to_standard_cache()
+            
+            print(f"   Decompressed cache: {len(standard_cache)} layers, {standard_cache[0][0].shape[2]} tokens")
+            
+            # Generate with decompressed cache
+            with profile_component("token_generation", {"max_tokens": max_new_tokens, "compressed_cache": True}):
+                generated_ids = self.target_model.generate(
+                    input_ids,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=True,
+                    temperature=0.7,
+                    past_key_values=standard_cache
+                )
+        else:
+            # Fallback to standard generation (no compression)
+            print("Using standard generation (no compressed cache)")
+            with profile_component("token_generation", {"max_tokens": max_new_tokens, "compressed_cache": False}):
+                generated_ids = self.target_model.generate(
+                    input_ids,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=True,
+                    temperature=0.7
+                )
 
         # Decode
         generated_text = self.tokenizer.decode(generated_ids[0][len(input_ids[0]):], skip_special_tokens=True)
@@ -175,7 +208,7 @@ class CSAEngine:
         # Increment step counter
         self.generation_step += 1
 
-        return f"[CSA with compression demo] {generated_text}"
+        return generated_text
     
     def _full_generate(self, input_ids, max_new_tokens):
         """Full CSA generation with SSD async speculation."""
