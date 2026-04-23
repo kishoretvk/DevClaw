@@ -1,0 +1,121 @@
+{
+  "summary": {
+    "total_time": 7.479812383651733,
+    "total_memory_delta": 32.98046875,
+    "component_breakdown": {
+      "tokenization": {
+        "avg_duration": 0.0,
+        "total_duration": 0.0,
+        "percentage": 0.0,
+        "call_count": 1
+      },
+      "prefill_phase": {
+        "avg_duration": 1.7571828365325928,
+        "total_duration": 1.7571828365325928,
+        "percentage": 23.4923383957221,
+        "call_count": 1
+      },
+      "token_generation": {
+        "avg_duration": 5.720605373382568,
+        "total_duration": 5.720605373382568,
+        "percentage": 76.48059977929154,
+        "call_count": 1
+      },
+      "total_generation": {
+        "avg_duration": 7.478307247161865,
+        "total_duration": 7.478307247161865,
+        "percentage": 99.97987734968918,
+        "call_count": 1
+      }
+    },
+    "bottlenecks": [
+      {
+        "component": "prefill_phase",
+        "percentage": 23.4923383957221,
+        "recommendation": "Profile component for specific optimizations"
+      },
+      {
+        "component": "token_generation",
+        "percentage": 76.48059977929154,
+        "recommendation": "Profile model forward passes, optimize batching"
+      },
+      {
+        "component": "total_generation",
+        "percentage": 99.97987734968918,
+        "recommendation": "Profile component for specific optimizations"
+      }
+    ],
+    "recommendations": [
+      "\ud83d\udea8 Address 3 major bottlenecks consuming >20% of time each",
+      "\ud83d\udd0d Use torch.profiler for detailed GPU kernel analysis",
+      "\ud83d\udcca Monitor GPU utilization with nvidia-smi during generation",
+      "\u26a1 Consider model quantization (GPTQ/AWQ) for baseline speed",
+      "\ud83d\udd04 Implement batching for multiple concurrent requests"
+    ]
+  },
+  "detailed_metrics": [
+    {
+      "component": "tokenization",
+      "start_time": 1776902128.3735423,
+      "end_time": 1776902128.3735423,
+      "duration": 0.0,
+      "memory_before": 20855.2265625,
+      "memory_after": 20855.2265625,
+      "memory_delta": 0.0,
+      "gpu_memory_before": 0.0,
+      "gpu_memory_after": 0.0,
+      "gpu_memory_delta": 0.0,
+      "metadata": {}
+    },
+    {
+      "component": "prefill_phase",
+      "start_time": 1776902128.3735423,
+      "end_time": 1776902130.1307251,
+      "duration": 1.7571828365325928,
+      "memory_before": 20855.2265625,
+      "memory_after": 20899.82421875,
+      "memory_delta": 44.59765625,
+      "gpu_memory_before": 0.0,
+      "gpu_memory_after": 0.0,
+      "gpu_memory_delta": 0.0,
+      "metadata": {
+        "seq_length": 6
+      }
+    },
+    {
+      "component": "token_generation",
+      "start_time": 1776902130.1312442,
+      "end_time": 1776902135.8518496,
+      "duration": 5.720605373382568,
+      "memory_before": 20899.7109375,
+      "memory_after": 20888.20703125,
+      "memory_delta": -11.50390625,
+      "gpu_memory_before": 0.0,
+      "gpu_memory_after": 0.0,
+      "gpu_memory_delta": 0.0,
+      "metadata": {
+        "max_tokens": 20,
+        "compressed_cache": false
+      }
+    },
+    {
+      "component": "total_generation",
+      "start_time": 1776902128.3735423,
+      "end_time": 1776902135.8518496,
+      "duration": 7.478307247161865,
+      "memory_before": 20855.2265625,
+      "memory_after": 20888.20703125,
+      "memory_delta": 32.98046875,
+      "gpu_memory_before": 0.0,
+      "gpu_memory_after": 0.0,
+      "gpu_memory_delta": 0.0,
+      "metadata": {
+        "prompt_length": 40,
+        "max_new_tokens": 20,
+        "use_speculation": false
+      }
+    }
+  ],
+  "export_time": 1776902135.8533547,
+  "total_measurements": 4
+}
