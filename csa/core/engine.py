@@ -5,6 +5,8 @@ import time
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from ..compression import AttentionMatcher, FP8Quantizer
 from ..compression.cache_wrapper import CompressedKVCache
+from ..compression.dynamic_cache import DynamicHierarchicalCache
+from ..core.score_extractor import AttentionScoreExtractor
 from ..quantization import TurboQuantCache
 try:
     from ..speculation.ssd import SSDSpeculator
