@@ -1,0 +1,187 @@
+#!/usr/bin/env python3
+"""Create a valid Colab notebook JSON file."""
+
+import json
+
+notebook = {
+    "cells": [
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": [
+                "# CSA GPU Benchmark - Google Colab\n",
+                "\n",
+                "Test Compressed Speculative Attention on GPU\n",
+                "\n",
+                "**Requirements:** GPU runtime (T4 or better)\n",
+                "\n",
+                "This notebook benchmarks CSA vs baseline generation."
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "# Check GPU availability\n",
+                "import torch\n",
+                "\n",
+                "if torch.cuda.is_available():\n",
+                "    print(f\"GPU: {torch.cuda.get_device_name(0)}\")\n",
+                "    print(f\"Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB\")\n",
+                "    device = \"cuda\"\n",
+                "else:\n",
+                "    print(\"WARNING: No GPU - switch to GPU runtime!\")\n",
+                "    device = \"cpu\"\n",
+                "\n",
+                "print(f\"Device: {device}\")"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "# Install dependencies and clone CSA\n",
+                "!pip install -q transformers accelerate\n",
+                "!git clone https://github.com/kishoretvk/DevClaw.git\n",
+                "import sys\n",
+                "sys.path.insert(0, '/content/DevClaw')"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "# Setup\n",
+                "from csa import CSAEngine\n",
+                "from transformers import AutoModelForCausalLM, AutoTokenizer\n",
+                "import time\n",
+                "\n",
+                "CONFIG = {\n",
+                "    'model_name': 'gpt2',\n",
+                "    'max_new_tokens': 50,\n",
+                "    'temperature': 0.7,\n",
+                "    'compression_ratio': 50,\n",
+                "    'compression_frequency': 'once',\n",
+                "    'skip_compression_threshold': 512\n",
+                "}\n",
+                "\n",
+                "# Create long prompt (>512 tokens to trigger compression)\n",
+                "prompt = ' AI will transform'.join([str(i) for i in range(200)])\n",
+                "\n",
+                "tokenizer = AutoTokenizer.from_pretrained(CONFIG['model_name'])\n",
+                "prompt_tokens = len(tokenizer.encode(prompt))\n",
+                "print(f\"Prompt length: {prompt_tokens} tokens\")\n",
+                "print(f\"Threshold: {CONFIG['skip_compression_threshold']} (need > this)\")"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "# Baseline benchmark\n",
+                "print(\"Running baseline...\")\n",
+                "model = AutoModelForCausalLM.from_pretrained(CONFIG['model_name']).to(device)\n",
+                "tokenizer = AutoTokenizer.from_pretrained(CONFIG['model_name'])\n",
+                "input_ids = tokenizer(prompt, return_tensors='pt').to(model.device)\n",
+                "\n",
+                "start = time.time()\n",
+                "with torch.no_grad():\n",
+                "    output = model.generate(\n",
+                "        input_ids.input_ids,\n",
+                "        max_new_tokens=CONFIG['max_new_tokens'],\n",
+                "        do_sample=True,\n",
+                "        temperature=CONFIG['temperature']\n",
+                "    )\n",
+                "baseline_time = time.time() - start\n",
+                "print(f\"Baseline time: {baseline_time:.2f}s\")"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "# Clear GPU memory\n",
+                "import gc\n",
+                "del model\n",
+                "gc.collect()\n",
+                "if torch.cuda.is_available():\n",
+                "    torch.cuda.empty_cache()\n",
+                "    torch.cuda.synchronize()"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "# CSA benchmark\n",
+                "print(\"Running CSA...\")\n",
+                "engine = CSAEngine(\n",
+                "    CONFIG['model_name'],\n",
+                "    compression_ratio=CONFIG['compression_ratio'],\n",
+                "    compression_frequency=CONFIG['compression_frequency'],\n",
+                "    skip_compression_threshold=CONFIG['skip_compression_threshold'],\n",
+                "    use_speculation=False\n",
+                ")\n",
+                "\n",
+                "start = time.time()\n",
+                "csa_text = engine.generate(\n",
+                "    prompt,\n",
+                "    max_new_tokens=CONFIG['max_new_tokens'],\n",
+                "    enable_profiling=True\n",
+                ")\n",
+                "csa_time = time.time() - start\n",
+                "print(f\"CSA time: {csa_time:.2f}s\")"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "# Results\n",
+                "print(\"\\n=== RESULTS ===\")\n",
+                "print(f\"Baseline: {baseline_time:.2f}s\")\n",
+                "print(f\"CSA: {csa_time:.2f}s\")\n",
+                "print(f\"Speedup: {baseline_time/csa_time:.2f}x\")\n",
+                "\n",
+                "if baseline_time < csa_time:\n",
+                "    print(\"\\nNote: CSA is currently slower (adds overhead)\")\n",
+                "    print(\"Compressed cache is computed but not used in generation yet\")\n",
+                "else:\n",
+                "    print(\"\\nCSA is faster!\")"
+            ]
+        }
+    ],
+    "metadata": {
+        "kernelspec": {
+            "display_name": "Python 3",
+            "language": "python",
+            "name": "python3"
+        },
+        "language_info": {
+            "name": "python",
+            "version": "3.10.0"
+        }
+    },
+    "nbformat": 4,
+    "nbformat_minor": 4
+}
+
+# Write clean JSON
+with open('colab_gpu_benchmark.ipynb', 'w', encoding='utf-8') as f:
+    json.dump(notebook, f, indent=1, ensure_ascii=False)
+
+print("Created colab_gpu_benchmark.ipynb")
