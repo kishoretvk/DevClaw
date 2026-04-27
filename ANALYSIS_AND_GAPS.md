@@ -10,26 +10,30 @@ The CSA (Compressed Speculative Attention) project has a **solid architectural f
 
 ### 1. Core Algorithm: Compressed Cache Not Used (BLOCKER)
 
-**Location**: `csa/core/engine.py` lines 162-170
+**Location**: `csa/core/engine.py` lines 165-206
 
 **What the code does**:
 ```python
 # Compress KV cache (this works)
 skeleton_kv = self._compress_kv(full_kv)
 
-# Then... completely ignores it!
+# Then... completely ignores it for actual generation!
+# Instead decompresses to standard format:
+standard_cache = compressed_cache.to_standard_cache()
 generated_ids = self.target_model.generate(
-    input_ids,  # <-- NOT using skeleton_kv
+    input_ids,  # <-- NOT using compressed cache directly
     max_new_tokens=max_new_tokens,
-    ...
+    past_key_values=standard_cache  # Decompressed!
 )
 ```
 
 **What it should do**:
 ```python
-# Use compressed cache during generation
-# This requires custom attention layers or
-# dequantizing before passing to model.generate()
+# Use compressed cache directly in custom attention
+# This requires:
+# 1. Custom attention layer that accepts compressed KV
+# 2. Dequantization pipeline within attention
+# 3. Variable-length sequence handling
 ```
 
 **Impact**: 
@@ -53,8 +57,8 @@ generated_ids = self.target_model.generate(
 - Method stubs for `predict_outcomes()`, `speculate_async()`, `verify()`
 
 **What doesn't work**:
-- `predict_outcomes()` returns random tokens (no actual prediction)
-- `speculate_async()` has no async implementation
+- `predict_outcomes()` returns hardcoded patterns, not real predictions
+- `speculate_async()` uses threads but no actual CUDA stream parallelism
 - `verify()` compares against random speculations
 - No actual speedup from speculation
 
@@ -223,12 +227,12 @@ def test_csa_engine():
    - Subclass transformer attention
    - Add dequantization pipeline
    - Handle variable-length compressed sequences
-   
+    
 2. **Integrate with generation loop** (3-5 days)
    - Modify `engine.py` to use compressed KV
    - Add mixed-precision handling
    - Test with different models
-   
+    
 3. **Run real benchmarks** (2-3 days)
    - Measure actual speedup
    - Verify quality degradation < 5%
@@ -248,11 +252,11 @@ def test_csa_engine():
    - Compression correctness
    - Quantization roundtrip
    - Quality metrics
-   
+    
 3. **Document limitations** clearly (2-3 days)
    - Update all docs with "proof-of-concept" status
    - Explain what works vs what's theoretical
-   
+    
 4. **Add visualization** of compression (2-3 days)
    - Show KV cache reduction
    - Quality vs compression tradeoff
@@ -271,12 +275,12 @@ def test_csa_engine():
    - Error handling in integration examples
    - Memory cleanup
    - Edge cases
-   
+    
 2. **Add basic tests** (3-4 days)
    - Unit tests for compression
    - Unit tests for quantization
    - Integration smoke tests
-   
+    
 3. **Improve examples** (2-3 days)
    - Make basic_usage.py actually run
    - Add error messages
