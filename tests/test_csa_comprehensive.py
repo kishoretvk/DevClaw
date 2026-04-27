@@ -80,7 +80,8 @@ class TestAttentionMatching:
         # Should have sampled uniformly
         assert comp_key.shape[2] == 10
         # Values should be from original (sampled)
-        assert comp_key.max() < key.max()
+        # Note: max may be equal if last element is sampled
+        assert comp_key.max() <= key.max()
         assert comp_key.min() >= key.min()
 
 
