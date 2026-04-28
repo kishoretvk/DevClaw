@@ -1,0 +1,40 @@
+{
+  "compression": [
+    {
+      "ratio": 5,
+      "original_mb": 7.1015625,
+      "compressed_mb": 1.40625,
+      "actual_ratio": 5.05,
+      "compression_time_ms": 5.995988845825195
+    },
+    {
+      "ratio": 10,
+      "original_mb": 7.1015625,
+      "compressed_mb": 0.703125,
+      "actual_ratio": 10.1,
+      "compression_time_ms": 2.999544143676758
+    },
+    {
+      "ratio": 20,
+      "original_mb": 7.1015625,
+      "compressed_mb": 0.3515625,
+      "actual_ratio": 20.2,
+      "compression_time_ms": 3.602743148803711
+    },
+    {
+      "ratio": 50,
+      "original_mb": 7.1015625,
+      "compressed_mb": 0.140625,
+      "actual_ratio": 50.5,
+      "compression_time_ms": 1.7039775848388672
+    }
+  ],
+  "quantization": {
+    "mse": 0.0013313110684975982,
+    "max_error": 0.24875926971435547,
+    "quant_time_ms": 0.0,
+    "original_dtype": "torch.float32",
+    "quantized_dtype": "torch.float8_e4m3fn"
+  },
+  "memory": null
+}

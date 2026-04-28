@@ -1,4 +1,6 @@
-# Core CSA engine
+"""
+Core CSA (Compressed Speculative Attention) engine.
+"""
 
 import torch
 import time
@@ -14,10 +16,15 @@ except ImportError:
     SSDSpeculator = None
 from ..recovery import BackgroundRecovery
 from ..profiling import get_profiler, profile_component
+from ..attention import CompressedAttention, AttentionPatcher
+
 
 class CSAEngine:
+    """Main engine for CSA acceleration."""
+    
     def __init__(self, target_model_path, draft_model_path=None, compression_ratio=50, quant_bits=3,
-                 use_speculation=False, compression_frequency="once", skip_compression_threshold=512):
+                 use_speculation=False, compression_frequency="once", skip_compression_threshold=512,
+                 device="auto"):
         """
         Initialize CSA Engine with speed optimization options.
 
@@ -29,9 +36,18 @@ class CSAEngine:
             use_speculation: Enable SSD speculative decoding
             compression_frequency: How often to compress ("once", "per_10_tokens", "lazy")
             skip_compression_threshold: Skip compression for prompts shorter than this
+            device: Device to use ("cuda", "cpu", "auto")
         """
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.target_model = AutoModelForCausalLM.from_pretrained(target_model_path, torch_dtype=torch.float16).to(device)
+        # Device configuration
+        if device == "auto":
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        else:
+            self.device = torch.device(device)
+        
+        self.target_model = AutoModelForCausalLM.from_pretrained(
+            target_model_path, torch_dtype=torch.float16
+        ).to(self.device)
+        
         self.tokenizer = AutoTokenizer.from_pretrained(target_model_path)
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
@@ -46,9 +62,10 @@ class CSAEngine:
         self.matcher = AttentionMatcher(compression_ratio=compression_ratio)
         self.quantizer = FP8Quantizer()
 
-        # Get head_dim for quantizer
+        # Get head_dim and num_heads for quantizer
         config = self.target_model.config
         self.head_dim = getattr(config, 'head_dim', config.hidden_size // config.num_attention_heads)
+        self.num_heads = config.num_attention_heads
 
         # Performance tracking
         self.generation_step = 0
@@ -56,6 +73,26 @@ class CSAEngine:
 
         self.speculator = None
         self.recovery = None
+        
+        # Patch model with CompressedAttention for direct compressed cache usage
+        print("Patching model attention for compressed cache support...")
+        try:
+            self.patched_layers = AttentionPatcher.patch_model(
+                self.target_model,
+                compression_ratio=compression_ratio,
+                device=str(self.device)
+            )
+            print(f"   Patched {len(self.patched_layers)} attention layers")
+            
+            # Enable compressed mode on patched layers
+            print("   Enabling compressed mode...")
+            for layer in self.patched_layers:
+                layer.enable_compressed_mode()
+            print(f"   Compressed attention ready for generation!")
+            
+        except ValueError as e:
+            print(f"   Could not patch model: {e}")
+            self.patched_layers = []
     
     def generate(self, prompt, max_new_tokens=100, enable_profiling=False):
         """
@@ -81,7 +118,7 @@ class CSAEngine:
         }):
             # Tokenize prompt
             with profile_component("tokenization"):
-                input_ids = self.tokenizer.encode(prompt, return_tensors="pt").to(self.target_model.device)
+                input_ids = self.tokenizer.encode(prompt, return_tensors="pt").to(self.device)
 
             if not self.use_speculation:
                 # Simple mode: just compress prompt and generate normally
@@ -93,14 +130,14 @@ class CSAEngine:
         if enable_profiling:
             summary = profiler.end_profiling()
             # Print key insights
-            print(f"\\n📊 Performance Summary:")
+            print(f"\n Performance Summary:")
             print(f"   Total time: {summary['total_time']:.3f}s")
             print(f"   Memory delta: {summary['total_memory_delta']:+.1f}MB")
 
             if summary['bottlenecks']:
-                print(f"   🚨 Bottlenecks found: {len(summary['bottlenecks'])}")
+                print(f"   Bottlenecks found: {len(summary['bottlenecks'])}")
                 for bottleneck in summary['bottlenecks']:
-                    print(f"      • {bottleneck['component']}: {bottleneck['percentage']:.1f}%")
+                    print(f"      {bottleneck['component']}: {bottleneck['percentage']:.1f}%")
 
             # Export detailed profile
             profiler.export_metrics(f"csa_profile_{int(time.time())}.json")
@@ -124,7 +161,7 @@ class CSAEngine:
         return True
 
     def _simple_generate(self, input_ids, max_new_tokens):
-        """Simple generation with compression - NOW USING COMPRESSED CACHE!"""
+        """Simple generation with compression."""
         seq_length = input_ids.shape[1]
 
         # Prefill phase
@@ -137,7 +174,7 @@ class CSAEngine:
         should_compress = self._should_compress(seq_length)
 
         if should_compress:
-            print("🔧 Compressing KV cache...")
+            print("Compressing KV cache...")
 
             # Compress skeleton
             skeleton_kv = []
@@ -148,7 +185,7 @@ class CSAEngine:
                         # Quantize skeleton to FP8
                         with profile_component("fp8_quantization"):
                             comp_kv = (self.quantizer.quantize(comp_kv[0]), self.quantizer.quantize(comp_kv[1]))
-                        skeleton_kv.append(comp_kv)
+                            skeleton_kv.append(comp_kv)
 
             # Cache the compressed skeleton
             self.skeleton_kv = skeleton_kv
@@ -164,34 +201,18 @@ class CSAEngine:
 
         # Use compressed cache for generation!
         if skeleton_kv is not None:
-            print("🚀 Using COMPRESSED KV cache for generation!")
+            print("Using COMPRESSED KV cache for generation!")
+            print(f"   Passing {len(skeleton_kv)} compressed layers directly to model")
             
-            # Create compressed cache wrapper
-            original_seq_len = full_kv[0][0].shape[2] if should_compress else self.skeleton_kv[0][0].shape[2] * self.matcher.compression_ratio
-            
-            compressed_cache = CompressedKVCache(
-                compressed_kv=skeleton_kv,
-                original_seq_len=original_seq_len,
-                compression_ratio=self.matcher.compression_ratio,
-                quantizer=self.quantizer,
-                device=self.target_model.device
-            )
-            
-            # Decompress to standard format for model.generate()
-            # This maintains compatibility while storing compressed in memory
-            with profile_component("decompress_for_generation"):
-                standard_cache = compressed_cache.to_standard_cache()
-            
-            print(f"   Decompressed cache: {len(standard_cache)} layers, {standard_cache[0][0].shape[2]} tokens")
-            
-            # Generate with decompressed cache
+            # Pass compressed KV directly to model
+            # The patched CompressedAttention layers will handle it
             with profile_component("token_generation", {"max_tokens": max_new_tokens, "compressed_cache": True}):
                 generated_ids = self.target_model.generate(
                     input_ids,
                     max_new_tokens=max_new_tokens,
                     do_sample=True,
                     temperature=0.7,
-                    past_key_values=standard_cache
+                    past_key_values=skeleton_kv  # Pass compressed KV directly!
                 )
         else:
             # Fallback to standard generation (no compression)
@@ -226,12 +247,13 @@ class CSAEngine:
 
             # Initialize SSD speculator with CUDA streams
             with profile_component("ssd_init"):
-                self.speculator = SSDSpeculator(
-                    self.draft_model_path,
-                    skeleton_kv,
-                    use_cuda_streams=True  # Enable async CUDA streams
-                )
-                turbo_cache = TurboQuantCache(dim=self.head_dim, bits=3, device=self.target_model.device)
+                if SSDSpeculator is not None:
+                    self.speculator = SSDSpeculator(
+                        self.draft_model_path,
+                        skeleton_kv,
+                        use_cuda_streams=True
+                    )
+                turbo_cache = TurboQuantCache(dim=self.head_dim, bits=3, device=self.device)
 
             # Start background recovery (non-blocking)
             with profile_component("recovery_init"):
@@ -246,11 +268,17 @@ class CSAEngine:
                 with profile_component(f"generation_step_{step}"):
                     # SSD: Async speculation for predicted outcomes
                     with profile_component("outcome_prediction"):
-                        predicted_outcomes = self.speculator.predict_outcomes(current_ids.tolist())
+                        if self.speculator:
+                            predicted_outcomes = self.speculator.predict_outcomes(current_ids.tolist())
+                        else:
+                            predicted_outcomes = []
 
                     # Parallel speculation using CUDA streams
                     with profile_component("async_speculation", {"num_outcomes": len(predicted_outcomes)}):
-                        speculations = self.speculator.speculate_async(current_ids.tolist(), predicted_outcomes)
+                        if self.speculator:
+                            speculations = self.speculator.speculate_async(current_ids.tolist(), predicted_outcomes)
+                        else:
+                            speculations = {}
 
                     # Generate next token with target model
                     with profile_component("target_forward"):
@@ -260,10 +288,13 @@ class CSAEngine:
 
                     # Verify against speculations (SSD core logic)
                     with profile_component("speculation_verification"):
-                        # For simplicity, verify the most likely speculation
-                        best_outcome = predicted_outcomes[0]
-                        best_spec = speculations[best_outcome][:5]  # First 5 tokens
-                        accepted = self.speculator.verify(self.target_model, best_spec, skeleton_kv, turbo_cache)
+                        if self.speculator and predicted_outcomes:
+                            # For simplicity, verify the most likely speculation
+                            best_outcome = predicted_outcomes[0]
+                            best_spec = speculations.get(best_outcome, [])[:5]
+                            accepted = self.speculator.verify(self.target_model, best_spec, skeleton_kv, turbo_cache)
+                        else:
+                            accepted = []
 
                     # Accept verified tokens
                     with profile_component("token_acceptance"):
@@ -274,7 +305,8 @@ class CSAEngine:
 
             # Stop background recovery
             with profile_component("recovery_cleanup"):
-                self.recovery.stop()
+                if self.recovery:
+                    self.recovery.stop()
 
         # Decode final result
         text = self.tokenizer.decode(generated_tokens, skip_special_tokens=True)
@@ -291,8 +323,6 @@ class CSAEngine:
     
     def _target_forward(self, input_tokens, skeleton_kv, turbo_cache):
         """Forward pass with compressed cache."""
-        # Simplified: use standard forward, ignoring compression for now
-        # In full implementation, need custom attention layer
         with torch.no_grad():
             outputs = self.target_model(input_tokens.unsqueeze(0), past_key_values=skeleton_kv)
             next_token_logits = outputs.logits[:, -1, :]
@@ -303,3 +333,17 @@ class CSAEngine:
         """Extract new KV from last forward pass."""
         # Placeholder: in practice, hook into model to capture
         return None
+    
+    def cleanup(self):
+        """Clean up resources and restore original model if patched."""
+        if hasattr(self, 'patched_layers') and self.patched_layers:
+            print("Restoring original attention layers...")
+            AttentionPatcher.restore_model(self.patched_layers)
+            self.patched_layers = []
+        
+        if hasattr(self, 'recovery') and self.recovery:
+            self.recovery.stop()
+        
+        if hasattr(self, 'speculator') and self.speculator:
+            # Clean up speculator resources
+            pass
