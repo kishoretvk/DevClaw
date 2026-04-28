@@ -5,28 +5,28 @@
       "original_mb": 7.1015625,
       "compressed_mb": 1.40625,
       "actual_ratio": 5.05,
-      "compression_time_ms": 5.995988845825195
+      "compression_time_ms": 10.178804397583008
     },
     {
       "ratio": 10,
       "original_mb": 7.1015625,
       "compressed_mb": 0.703125,
       "actual_ratio": 10.1,
-      "compression_time_ms": 2.999544143676758
+      "compression_time_ms": 5.101203918457031
     },
     {
       "ratio": 20,
       "original_mb": 7.1015625,
       "compressed_mb": 0.3515625,
       "actual_ratio": 20.2,
-      "compression_time_ms": 3.602743148803711
+      "compression_time_ms": 3.5157203674316406
     },
     {
       "ratio": 50,
       "original_mb": 7.1015625,
       "compressed_mb": 0.140625,
       "actual_ratio": 50.5,
-      "compression_time_ms": 1.7039775848388672
+      "compression_time_ms": 1.7504692077636719
     }
   ],
   "quantization": {
@@ -36,5 +36,10 @@
     "original_dtype": "torch.float32",
     "quantized_dtype": "torch.float8_e4m3fn"
   },
-  "memory": null
+  "memory": {
+    "standard_time_s": 1.6081883907318115,
+    "compressed_time_s": 0,
+    "standard_memory_mb": null,
+    "compressed_memory_mb": null
+  }
 }

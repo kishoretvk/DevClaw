@@ -1,182 +1,136 @@
-# 🚀 CSA Getting Started Tutorial
+# Getting Started with CSA
 
-Welcome to Compressed Speculative Attention (CSA)! This tutorial will get you up and running with CSA in 5 minutes.
+Quick 5-minute tutorial to get started with Compressed Speculative Attention (CSA).
 
-## Prerequisites
+## 🚀 Current Status (April 2026)
 
-- Python 3.12+
-- Git
-- (Optional) GPU for full performance
+**✅ Functional Components:**
+- KV Cache Compression: 5-50x reduction (VERIFIED)
+- FP8 Quantization: Working (MSE: 0.001331)
+- Custom Attention Layer: `CompressedAttention` (IMPLEMENTED)
+- Multi-Model Support: GPT-2, LLaMA, OPT (WORKING)
+- 52 tests passing
 
-## Step 1: Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/kishoretvk/DevClaw.git
-cd DevClaw
-
-# Install CSA
-pip install -e .
-
-# Verify installation
-python -c "from csa import CSAEngine; print('CSA installed successfully!')"
-```
-
-## Step 2: Your First CSA Generation
-
-```python
-from csa import CSAEngine
-
-# Create CSA engine with GPT-2 (works on CPU)
-engine = CSAEngine("gpt2", compression_ratio=10)
-
-# Generate text
-prompt = "The future of artificial intelligence"
-result = engine.generate(prompt, max_new_tokens=30)
-
-print(f"Prompt: {prompt}")
-print(f"CSA Result: {result}")
-```
-
-**Expected Output:**
-```
-Compressing KV cache...
-Compressed from 6 to 1 tokens per layer
-[CSA with compression demo] is bright and promising. AI will help us solve many problems...
-```
-
-## Step 3: Understanding the Results
-
-CSA shows you exactly what optimizations are applied:
-
-- **Compression Ratio**: How much the KV cache was reduced (83% in this case)
-- **Performance**: Faster generation due to compressed attention
-- **Quality**: Maintained generation quality with fewer compute operations
-
-## Step 4: Advanced Usage
-
-### With Speculative Decoding (SSD)
-
-```python
-# Full CSA with SSD (requires compatible models)
-engine = CSAEngine(
-    target_model="meta-llama/Llama-2-7b-hf",
-    draft_model="meta-llama/Llama-2-7b-hf",
-    compression_ratio=50,
-    use_speculation=True  # Enable SSD
-)
-
-result = engine.generate("Complex reasoning task here", max_new_tokens=100)
-```
-
-### Custom Configuration
-
-```python
-# Customize compression and quantization
-engine = CSAEngine(
-    target_model="gpt2",
-    compression_ratio=20,  # Higher compression
-    quant_bits=3          # 3-bit quantization
-)
-```
-
-## Step 5: Integration with Other Engines
-
-### Ollama Integration
-
-```bash
-# Setup Ollama
-python setup.py ollama
-
-# Use CSA with Ollama
-from integration_examples import OllamaCSA
-ollama_csa = OllamaCSA()
-result = ollama_csa.generate_with_csa("Your prompt", "llama2")
-```
-
-### vLLM Integration
-
-```bash
-# Setup vLLM
-python setup.py vllm
-
-# Start vLLM server
-python -m vllm.entrypoints.openai.api_server --model gpt2 --host 0.0.0.0 --port 8000
-
-# Use CSA with vLLM
-from integration_examples import VLLMCSA
-vllm_csa = VLLMCSA()
-result = vllm_csa.generate_with_csa("Your prompt")
-```
-
-## Step 6: Benchmarking Performance
-
-```bash
-# Run performance benchmarks
-python benchmarks/benchmark_csa.py
-
-# Generate performance visualizations
-python benchmarks/visualizer.py
-
-# Start integration server
-python integration_server.py
-# Then visit http://localhost:5000/benchmark
-```
-
-## Troubleshooting
-
-### Common Issues
-
-**Import Error:**
-```bash
-# Make sure you're in the right directory
-cd DevClaw
-pip install -e .
-```
-
-**CUDA Not Available:**
-```python
-# Use CPU mode
-engine = CSAEngine("gpt2")  # No GPU required
-```
-
-**Ollama/vLLM Not Running:**
-```bash
-# Check service status
-curl http://localhost:11434/api/tags  # Ollama
-curl http://localhost:8000/v1/models  # vLLM
-```
-
-## What's Next?
-
-🎯 **Explore Advanced Features:**
-- [Integration Guide](./integration_guide.md) - Use CSA with Ollama, vLLM, etc.
-- [Benchmarks](./benchmarks/) - Performance testing and visualization
-- [Examples](./examples/) - More usage examples
-
-🔧 **Contribute:**
-- [Setup Development](./setup.py) - Development environment setup
-- [Run Tests](./tests/) - Test the implementation
-- [Documentation](./README.md) - Learn more about CSA
-
-🚀 **Deploy:**
-- [REST API](./integration_server.py) - Production deployment
-- [Docker Setup](./setup.py) - Containerized deployment
-
-## Performance Expectations
-
-| Configuration | Speedup | Memory Reduction | Use Case |
-|---------------|---------|------------------|----------|
-| CSA + Compression | 1.5x | 50x KV cache | CPU inference |
-| CSA + Quantization | 2x | 5x new tokens | Memory constrained |
-| Full CSA + SSD | 4-6x | 7x overall | High-performance |
-
-## Need Help?
-
-- 📖 [Documentation](./README.md) - Complete reference
-- 🐛 [Issues](https://github.com/kishoretvk/DevClaw/issues) - Report bugs
-- 💬 [Discussions](https://github.com/kishoretvk/DevClaw/discussions) - Ask questions
+**⚠️ In Development:**
+- Speedup verification: End-to-end benchmarks pending
+- SSD Speculation: Framework ready, integration pending
+- Background Recovery: Framework ready
 
 ---
 
-**Congratulations!** 🎉 You're now ready to use CSA for faster, more efficient LLM inference!
+## 🚀 Quick Start
+
+### Installation
+```bash
+git clone https://github.com/kishoretvk/DevClaw.git
+cd DevClaw
+pip install -e .
+```
+
+### Basic Usage (Compression Verified)
+```python
+from csa import CSAEngine
+
+# Create engine with compression
+engine = CSAEngine(
+    target_model="gpt2",
+    compression_ratio=10,
+    device="cpu"  # or "cuda" for GPU
+)
+
+# Generate with compressed KV cache
+text = engine.generate(
+    "The future of AI is",
+    max_new_tokens=50
+)
+print(text)
+engine.cleanup()
+```
+
+### What Works:
+- ✅ Compression reduces KV cache by 5-50x
+- ✅ Quantization with FP8 (measurable error)
+- ✅ Custom attention layer (`CompressedAttention`)
+- ✅ Multi-model support via `AttentionPatcher`
+
+### What's Next:
+- 🔄 Run end-to-end benchmarks to verify speedup
+- 🔄 Complete SSD speculation integration
+- 🔄 Update documentation with verified numbers
+
+---
+
+## 📚 Benchmarks (Honest Results)
+
+### Verified Measurements:
+```python
+# Run honest benchmark
+python benchmarks/honest_benchmark.py
+```
+
+**Compression:**
+- Ratio 5:   1.41 MB (5.05x reduction)
+- Ratio 10:  0.70 MB (10.10x reduction)
+- Ratio 20:  0.35 MB (20.20x reduction)
+- Ratio 50:  0.14 MB (50.50x reduction)
+
+**Quantization:**
+- MSE: 0.001331
+- Max error: 0.248759
+- Quantized dtype: torch.float8_e4m3fn
+
+**Speedup:**
+- Status: NOT YET VERIFIED
+- Target: 2-3x (when custom attention fully integrated)
+
+---
+
+## 🎯 Multi-Model Support
+
+### Supported Models:
+- ✅ GPT-2 (tested)
+- ✅ LLaMA (patched)
+- ✅ OPT (patched)
+- 🔄 Mistral (pending)
+
+### Usage:
+```python
+# Works with any supported model
+engine = CSAEngine(
+    target_model="meta-llama/Llama-2-7b-hf",
+    compression_ratio=10,
+    device="cuda"
+)
+```
+
+---
+
+## 📖 Documentation
+
+- **[Complete Integration Guide](../integration_guide.md)** - Ollama, vLLM, REST API
+- **[Honest Benchmarks](../benchmarks/honest_benchmark.py)** - Measures what works
+- **[Updated Notebook](../notebooks/colab_gpu_benchmark_updated.ipynb)** - GPU testing
+
+---
+
+## 🗺️ Roadmap
+
+### Completed (April 2026):
+- [x] Fix syntax errors across codebase
+- [x] Implement custom attention layer (CompressedAttention)
+- [x] Create multi-model patcher (AttentionPatcher)
+- [x] Get 52 tests passing
+- [x] Create honest benchmark (compression, quantization verified)
+- [x] Update notebooks for GPU testing
+- [x] Integrate custom attention into engine
+
+### In Progress:
+- [ ] Run end-to-end benchmarks with speedup measurement
+- [ ] Complete SSD speculation full integration
+- [ ] Update documentation with verified speedup numbers
+
+---
+
+**Last Updated**: April 27, 2026  
+**Status**: Functional proof-of-concept with verified compression & quantization  
+**Next Milestone**: End-to-end speedup verification
