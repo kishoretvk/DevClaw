@@ -157,11 +157,11 @@ class DynamicHierarchicalCache:
         # Average over batch and heads to get per-key-token importance
         # Shape: (query_len, key_len)
         scores_per_key = attention_scores.mean(dim=(0, 1))
-        
+
         # For generation, query_len=1 (just the new token)
         # Get attention from new token to all previous tokens
         new_token_attention = scores_per_key[-1]  # Last query position
-        
+
         # Extend scores tensor to match current sequence length
         current_len = self.detail_scores[layer_idx].shape[0]
         new_len = new_token_attention.shape[0]
