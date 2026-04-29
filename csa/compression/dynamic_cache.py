@@ -150,23 +150,24 @@ class DynamicHierarchicalCache:
     def _update_scores(self, layer_idx, attention_scores):
         """
         Update cumulative attention scores.
-        
+
         Args:
-            attention_scores: (batch, heads, query_len, key_len)
+            attention_scores: (batch, heads, query_len, key_len) or (key_len,) for prefill
         """
-        # Average over batch and heads to get per-key-token importance
-        # Shape: (query_len, key_len)
-        scores_per_key = attention_scores.mean(dim=(0, 1))
+        # Handle both 4D (generation) and 1D (prefill) input
+        if attention_scores.dim() == 4:
+            # Average over batch and heads to get per-key importance
+            # Shape: (query_len, key_len)
+            scores_per_key = attention_scores.mean(dim=(0, 1))
 
-        # For generation, query_len=1 (just the new token)
-        # Get attention from new token to all previous tokens
-        new_token_attention = scores_per_key[-1]  # Last query position
-
-        # Extend scores tensor to match current sequence length
-        current_len = self.detail_scores[layer_idx].shape[0]
-        new_len = new_token_attention.shape[0]
-        
-        if new_len > current_len:
+            # For generation, query_len=1 (just the new token)
+            # Get attention from new token to all previous tokens
+            new_token_attention = scores_per_key[-1]  # Last query position
+        else:
+            # Prefill phase: scores already per-key
+            new_token_attention = attention_scores
+            new_len = new_token_attention.shape[0]
+            current_len = self.detail_scores[layer_idx].shape[0]
             # Pad with zeros for new tokens
             padding = torch.zeros(new_len - current_len)
             self.detail_scores[layer_idx] = torch.cat([
