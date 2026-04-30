@@ -16,6 +16,11 @@
 | Debug generation pipeline | Dev-5 | ✅ DONE | Generation works on CPU |
 | Test notebooks | Dev-4, Dev-5 | ✅ CREATED | `notebooks/cs_framework_test.ipynb` |
 | No fine-tuning | All | ✅ CONFIRMED | Pure Python framework |
+| **Task 1: Speedup test** | **Dev-7** | ✅ **DONE** | `benchmarks/speedup_test.py` ✅ |
+| **Task 2: Multi-model** | **Dev-8** | ✅ **DONE** | `tests/test_multimodel.py` ✅ |
+| **Task 3: Production** | **Dev-9** | ✅ **DONE** | `tests/test_production.py` ✅ |
+| Simple benchmark | Dev-6-Restart | ✅ DONE | `benchmarks/simple_bench.py` (1.35x CPU) |
+| Colab notebooks | Dev-6-Restart | ✅ DONE | `notebooks/cs_framework_colab_gpu.ipynb` ✅ |
 
 ---
 
@@ -23,9 +28,8 @@
 
 | Task | Owner | Status | Blocker |
 |------|-------|--------|----------|
-| Verify 5-10x speedup | Dev-6, Manager | 🔄 RUNNING | GPU environment timeout |
-| Manager verification | Manager (a8ac0bdf...) | 🔄 RUNNING | Just launched |
-| End-to-end benchmark | Dev-6 | ❌ NO OUTPUT | Task ID not found |
+| **Task 4: Manager sign-off** | Manager-2 | 🔄 **REVIEWING** | GPU verification pending |
+| QA Sign-off | QA/Product Owner | ❌ NOT STARTED | Waiting for manager |
 
 ---
 
@@ -33,9 +37,10 @@
 
 | Task | Owner | Notes |
 |------|-------|-------|
-| GPU speedup verification | Dev-6 | Need GPU environment |
-| LLaMA/OPT testing | TBD | Supported via AttentionPatcher |
-| Production release | Manager | Waiting for speedup verification |
+| **5-10x Speedup VERIFIED** | Dev-7 | GPU environment needed |
+| **QA Sign-off files** | QA | Need to create 3 sign-off files |
+| **Manager Final Sign-off** | Manager-2 | Blocked on GPU speedup verification |
+| **Production Release v1.0** | All | Waiting for all sign-offs |
 
 ---
 
