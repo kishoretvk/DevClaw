@@ -13,7 +13,7 @@
 
 - [x] `csa/core/engine.py` - Reviewed, works on CPU
 - [x] `csa/speculation/ssd.py` - Self-Speculative Decoding implemented
-- [x] `csa/compression/dynamic_cache.py` - DynamicHierarchicalCache integrated
+- [x] `csa/compression/dynamic_cache.py` - DynamicHierarchicalCache integrated, _update_scores bug fixed ✅
 - [x] `csa/attention/patcher.py` - Multi-model support ready
 - [x] `tests/test_production.py` - Created by Dev-9, passes on CPU
 - [x] `tests/test_multimodel.py` - Created by Dev-8, ready for GPU
@@ -26,7 +26,7 @@
 - [x] Run generation test on CPU: **PASSED** ("be able to" output)
 - [x] Verify 50x compression: **PASSED** (honest_results.json: 50.5x)
 - [ ] Verify speedup ≥5x: **PENDING** (need GPU - environment timeout)
-- [x] All tests pass: **PASSED** (5/5 production tests)
+- [x] All tests pass: **PASSED** (52 passed, 2 skipped)
 - [x] No fine-tuning required: **CONFIRMED** (pure Python framework)
 
 ---

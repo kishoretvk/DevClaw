@@ -163,18 +163,32 @@ class DynamicHierarchicalCache:
             # For generation, query_len=1 (just the new token)
             # Get attention from new token to all previous tokens
             new_token_attention = scores_per_key[-1]  # Last query position
+
+            # new_token_attention covers all keys (old + new)
+            # detail_scores only covers old keys, need to extend for the new token
+            new_len = new_token_attention.shape[0]
+            current_len = self.detail_scores[layer_idx].shape[0]
+
+            # Extend detail_scores for the new token (its cumulative score starts at 0)
+            if new_len > current_len:
+                padding = torch.zeros(new_len - current_len)
+                self.detail_scores[layer_idx] = torch.cat([
+                    self.detail_scores[layer_idx],
+                    padding
+                ])
         else:
             # Prefill phase: scores already per-key
             new_token_attention = attention_scores
             new_len = new_token_attention.shape[0]
             current_len = self.detail_scores[layer_idx].shape[0]
             # Pad with zeros for new tokens
-            padding = torch.zeros(new_len - current_len)
-            self.detail_scores[layer_idx] = torch.cat([
-                self.detail_scores[layer_idx],
-                padding
-            ])
-        
+            if new_len > current_len:
+                padding = torch.zeros(new_len - current_len)
+                self.detail_scores[layer_idx] = torch.cat([
+                    self.detail_scores[layer_idx],
+                    padding
+                ])
+
         # Accumulate attention scores
         min_len = min(current_len, new_len)
         self.detail_scores[layer_idx][:min_len] += new_token_attention[:min_len].cpu()
