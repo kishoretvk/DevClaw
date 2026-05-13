@@ -161,19 +161,25 @@ class CSAEngine:
 
         return result
 
-    def _should_compress(self, seq_length):
-        """Determine if compression should be applied based on configuration."""
-        if seq_length < self.skip_compression_threshold:
-            return False
+def _should_compress(self, seq_length):
+    """Determine if compression should be applied based on configuration."""
+    if seq_length < self.skip_compression_threshold:
+        return False
 
-        if self.compression_frequency == "once":
-            return self.skeleton_kv is None
-        elif self.compression_frequency == "per_10_tokens":
-            return self.generation_step % 10 == 0
-        elif self.compression_frequency == "lazy":
-            return self.skeleton_kv is None
+    if self.compression_frequency == "once":
+        # When using dynamic cache, check its initialized state
+        if self.use_dynamic_cache and self.dynamic_cache:
+            return not self.dynamic_cache.initialized
+        return self.skeleton_kv is None
+    elif self.compression_frequency == "per_10_tokens":
+        return self.generation_step % 10 == 0
+    elif self.compression_frequency == "lazy":
+        # When using dynamic cache, check its initialized state
+        if self.use_dynamic_cache and self.dynamic_cache:
+            return not self.dynamic_cache.initialized
+        return self.skeleton_kv is None
 
-        return True
+    return True
 
     def _simple_generate(self, input_ids, max_new_tokens):
         """Simple generation with compression."""

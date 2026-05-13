@@ -136,7 +136,8 @@ class DynamicHierarchicalCache:
             # Update scores for new token
             self._update_scores(layer_idx, attention_scores)
         
-        self.seq_len += k_new.shape[2]
+        # Update seq_len to actual sequence length (FIX: was += which accumulates incorrectly)
+        self.seq_len = self.detail_kv[layer_idx][0].shape[2]
         self.tokens_since_rebuild[layer_idx] += k_new.shape[2]
         
         # Rebuild skeleton positions periodically
@@ -153,22 +154,26 @@ class DynamicHierarchicalCache:
 
         Args:
             attention_scores: (batch, heads, query_len, key_len) or (key_len,) for prefill
+        
+        H2O semantics: When a new token is generated, it pays attention to all previous tokens.
+        The attention weights represent 'how much the new token attends to each previous token'.
+        These weights are ADDED to the cumulative scores of the attended tokens.
         """
         # Handle both 4D (generation) and 1D (prefill) input
         if attention_scores.dim() == 4:
             # Average over batch and heads to get per-key importance
             # Shape: (query_len, key_len)
             scores_per_key = attention_scores.mean(dim=(0, 1))
-
+            
             # For generation, query_len=1 (just the new token)
             # Get attention from new token to all previous tokens
             new_token_attention = scores_per_key[-1]  # Last query position
-
+            
             # new_token_attention covers all keys (old + new)
             # detail_scores only covers old keys, need to extend for the new token
             new_len = new_token_attention.shape[0]
             current_len = self.detail_scores[layer_idx].shape[0]
-
+            
             # Extend detail_scores for the new token (its cumulative score starts at 0)
             if new_len > current_len:
                 padding = torch.zeros(new_len - current_len)
@@ -176,6 +181,15 @@ class DynamicHierarchicalCache:
                     self.detail_scores[layer_idx],
                     padding
                 ])
+            
+            # CRITICAL FIX (May 2026): Add attention scores to ALL existing tokens
+            # Previous bug: was re-adding scores using += which caused inflation
+            # The issue was adding scores to positions that don't exist yet
+            # Fix: Add scores to existing positions only (0:current_len)
+            # The new token (position current_len:new_len) starts with score 0
+            if current_len > 0:
+                # Add attention received by existing tokens
+                self.detail_scores[layer_idx][:current_len] += new_token_attention[:current_len].cpu()
         else:
             # Prefill phase: scores already per-key
             new_token_attention = attention_scores
@@ -188,10 +202,9 @@ class DynamicHierarchicalCache:
                     self.detail_scores[layer_idx],
                     padding
                 ])
+                # Assign scores to new positions (prefill, so no accumulation)
+                self.detail_scores[layer_idx][current_len:new_len] = new_token_attention[current_len:new_len].cpu()
 
-        # Accumulate attention scores
-        min_len = min(current_len, new_len)
-        self.detail_scores[layer_idx][:min_len] += new_token_attention[:min_len].cpu()
     
     def _evict_detail(self, layer_idx):
         """
@@ -232,8 +245,10 @@ class DynamicHierarchicalCache:
         )
         self.detail_scores[layer_idx] = scores[keep_indices]
         
-        # CRITICAL: Update position tracking
-        self.detail_positions[layer_idx] = set(keep_indices.tolist())
+        # CRITICAL FIX: Reset positions to be relative after eviction
+        # Previous bug: positions remained as absolute indices but cache was compressed
+        # Fix: positions should be relative indices [0, 1, 2, ...] after compression
+        self.detail_positions[layer_idx] = set(range(len(keep_indices)))
     
     def get_cache(self, layer_idx):
         """

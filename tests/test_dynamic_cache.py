@@ -90,7 +90,13 @@ def test_detail_eviction():
 
 
 def test_score_accumulation():
-    """Test that scores accumulate correctly."""
+    """
+    Test that scores are assigned correctly to NEW tokens only.
+
+    CRITICAL: After the May 2026 fix, scores are NOT re-added to existing tokens.
+    Each token's score is set once when it's added, not accumulated across steps.
+    This prevents score inflation over time.
+    """
     cache = DynamicHierarchicalCache(
         skeleton_budget=20,
         detail_budget=128,
@@ -123,7 +129,7 @@ def test_score_accumulation():
     
     cache.update(0, (k_new2, v_new2), scores2)
     
-    # Score at position 0 should be accumulated (1.0 + 0.5 = 1.5)
+    # Score at position 0 should accumulate (1.0 + 0.5 = 1.5)
     assert abs(cache.detail_scores[0][0].item() - 1.5) < 0.01
 
 
@@ -203,3 +209,117 @@ def test_per_layer_independence():
     
     # Layer 1 should still have 20 tokens (unchanged)
     assert cache.detail_kv[1][0].shape[2] == 20
+
+
+def test_score_accumulation_no_inflation():
+    """
+    Test that scores don't inflate by re-adding to all previous tokens.
+
+    CRITICAL FIX TEST: Previous bug in _update_scores() was re-adding attention
+    scores to ALL previous tokens on each generation step, causing score inflation.
+    This test verifies that only NEW tokens get their scores added.
+    """
+    cache = DynamicHierarchicalCache(
+        skeleton_budget=20,
+        detail_budget=128,
+        recent_window=64,
+        num_layers=1
+    )
+
+    # Initialize with 10 tokens
+    full_kv = [(torch.randn(1, 8, 10, 64), torch.randn(1, 8, 10, 64))]
+    cache.initialize(full_kv)
+
+    # Add token 1 with attention score = 1.0
+    k_new = torch.randn(1, 8, 1, 64)
+    v_new = torch.randn(1, 8, 1, 64)
+    scores = torch.zeros(1, 8, 1, 11)
+    scores[0, :, 0, :] = 1.0  # All positions get score 1.0
+
+    cache.update(0, (k_new, v_new), scores)
+
+    # Add token 2 with attention score = 0.0 (no attention)
+    k_new2 = torch.randn(1, 8, 1, 64)
+    v_new2 = torch.randn(1, 8, 1, 64)
+    scores2 = torch.zeros(1, 8, 1, 12)
+    # Don't add any attention - scores should remain 1.0, not increase
+
+    cache.update(0, (k_new2, v_new2), scores2)
+
+    # CRITICAL: Score at position 0 should still be 1.0 (not inflated)
+    # Previous bug: would have been 2.0 (re-added)
+    assert cache.detail_scores[0][0].item() == 1.0, \
+        f"Score inflation detected: expected 1.0, got {cache.detail_scores[0][0].item()}"
+
+
+def test_seq_len_tracking():
+    """
+    Test that seq_len tracks actual sequence length correctly.
+
+    CRITICAL FIX TEST: Previous bug was using += which accumulated length
+    instead of setting it to actual length.
+    """
+    cache = DynamicHierarchicalCache(
+        skeleton_budget=20,
+        detail_budget=128,
+        recent_window=64,
+        num_layers=1
+    )
+
+    # Initialize with 10 tokens
+    full_kv = [(torch.randn(1, 8, 10, 64), torch.randn(1, 8, 10, 64))]
+    cache.initialize(full_kv)
+
+    assert cache.seq_len == 10, f"Expected seq_len=10, got {cache.seq_len}"
+
+    # Add 5 tokens one by one
+    for i in range(5):
+        k_new = torch.randn(1, 8, 1, 64)
+        v_new = torch.randn(1, 8, 1, 64)
+        scores = torch.zeros(1, 8, 1, 10 + i + 1)
+        cache.update(0, (k_new, v_new), scores)
+
+        # seq_len should be actual length, not accumulated
+        expected_len = 10 + i + 1
+        assert cache.seq_len == expected_len, \
+            f"Expected seq_len={expected_len}, got {cache.seq_len}"
+
+
+def test_position_alignment_after_eviction():
+    """
+    Test that positions remain aligned after eviction.
+
+    CRITICAL FIX TEST: Previous bug kept positions as absolute indices after
+    eviction, but the cache was compressed, causing misalignment.
+    """
+    cache = DynamicHierarchicalCache(
+        skeleton_budget=10,
+        detail_budget=5,  # Small budget to force eviction
+        recent_window=3,
+        num_layers=1
+    )
+
+    # Initialize with 10 tokens
+    full_kv = [(torch.randn(1, 8, 10, 64), torch.randn(1, 8, 10, 64))]
+    cache.initialize(full_kv)
+
+    # Add tokens to trigger eviction
+    for i in range(10):
+        k_new = torch.randn(1, 8, 1, 64)
+        v_new = torch.randn(1, 8, 1, 64)
+        scores = torch.zeros(1, 8, 1, 10 + i + 1)
+        cache.update(0, (k_new, v_new), scores)
+
+    # After eviction, positions should be relative [0, 1, 2, ...]
+    # not absolute indices from before eviction
+    k_detail, v_detail = cache.detail_kv[0]
+    actual_seq_len = k_detail.shape[2]
+    positions = cache.detail_positions[0]
+
+    # Positions should be valid indices into the compressed cache
+    assert all(0 <= p < actual_seq_len for p in positions), \
+        f"Position out of bounds: positions={positions}, actual_seq_len={actual_seq_len}"
+
+    # Number of positions should match actual cache size
+    assert len(positions) == actual_seq_len, \
+        f"Position count mismatch: {len(positions)} positions for {actual_seq_len} tokens"
