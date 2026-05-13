@@ -99,13 +99,22 @@ QUANTIZATION BENCHMARK:
   Quantized dtype: torch.float8_e4m3fn
 ```
 
-### Tests:
+### Tests (May 13, 2026):
 ```
-52 passed, 2 skipped
+55 passed, 2 skipped
 - test_csa_comprehensive.py: 26 tests
-- test_dynamic_cache.py: 8 tests
+- test_dynamic_cache.py: 11 tests (8 + 3 critical bug tests)
 - test_multimodel.py: 10 tests
 - test_production.py: 8 tests
+```
+
+### Critical Bug Fixes Impact:
+```
+Before Fix (5fcbb87)          After Fix (6092f24)
+- Score inflation: YES         - Score inflation: NO
+- Seq_len tracking: Broken     - Seq_len tracking: Fixed
+- Position alignment: Broken   - Position alignment: Fixed
+- Test coverage: 52 tests      - Test coverage: 55 tests (+3 regression)
 ```
 
 ## 📖 **Documentation & Tutorials**
@@ -230,13 +239,15 @@ Research completed on innovative approaches to enhance SSD with hidden-state-bas
 
 ## Changelog
 
-### May 13, 2026 - Critical Bug Fixes
-- **Fixed**: Score accumulation bug in `dynamic_cache.py` (line 194)
-- **Fixed**: Seq_len tracking bug in `dynamic_cache.py` (line 139)
-- **Fixed**: Position alignment bug in `dynamic_cache.py` (lines 229-236)
-- **Fixed**: Engine compression check in `engine.py` (lines 170-174)
-- **Added**: 3 new test cases for critical bug regression
+### May 13, 2026 - Critical Bug Fixes & Validation
+- **Fixed**: Score accumulation in `dynamic_cache.py` - H2O semantics with proper accumulation
+- **Fixed**: Seq_len tracking in `dynamic_cache.py` - direct assignment instead of +=
+- **Fixed**: Position alignment in `dynamic_cache.py` - relative indices after eviction
+- **Fixed**: Engine.py indentation in `_should_compress()` - proper Python syntax
+- **Added**: 3 new regression test cases for critical bugs
+- **Validated**: All 55/55 tests passing with comprehensive validation report
 - **Research**: MTP (Multi-Token Prediction) research complete
+- **Commit**: 6092f24 - fix: critical bug fixes with comprehensive validation
 
 ### April 29, 2026 - Initial Release
 - 55/55 tests passing
@@ -247,6 +258,6 @@ Based on draft v0.1 by Krishna (TheExploreEcho)
 
 ---
 
-**Last Updated**: April 29, 2026  
+**Last Updated**: May 13, 2026 - Critical bug fixes with full validation (55/55 tests passing)  
 **Status**: CPU complete (55/55 tests), GPU verification pending  
 **Next Milestone**: 5-10x speedup verification on GPU (Colab)
