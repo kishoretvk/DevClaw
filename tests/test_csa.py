@@ -45,21 +45,46 @@ def test_turboquant_cache():
     # Check shapes match
     assert retrieved[0].shape == kv[0].shape
 
+@pytest.mark.skip(reason="Requires model download - run manually with -m integration")
 def test_csa_initialization():
-    """Test CSA engine initialization (without actual models)."""
-    # Mock without loading models
-    try:
-        from csa.core import CSAEngine
-        # Would need mock models for full test
-        pass
-    except ImportError:
-        pytest.skip("Model dependencies not available")
+    """
+    Integration test: CSA engine initialization with actual model.
+
+    Note: This is an integration test requiring model downloads.
+    Skip with: pytest tests/test_csa.py -m "not integration"
+    """
+    from csa.core import CSAEngine
+
+    # Test with gpt2 (small model, fast download)
+    engine = CSAEngine(
+        target_model_path="gpt2",
+        compression_ratio=50,
+        quant_bits=3,
+        use_speculation=False,
+        compression_frequency="once",
+        device="cpu",
+        use_dynamic_cache=True
+    )
+
+    assert engine is not None
+    assert engine.compression_ratio == 50
+    assert engine.target_model is not None
 
 def test_ssd_speculator():
-    """Test SSD speculator (mocked)."""
-    # Would require actual model paths
-    pytest.skip("Requires model setup")
+    """Test SSD speculator class structure (without model loading)."""
+    from csa.speculation.ssd import SelfSpeculativeDecoder
+
+    # Verify the class exists and has required methods
+    assert SelfSpeculativeDecoder is not None
+    assert hasattr(SelfSpeculativeDecoder, '__init__')
+    assert hasattr(SelfSpeculativeDecoder, 'draft')
+    assert hasattr(SelfSpeculativeDecoder, 'verify')
 
 def test_background_recovery():
-    """Test background recovery (mocked)."""
-    pytest.skip("Complex threading test")
+    """Test background recovery class structure."""
+    from csa.recovery.recovery import BackgroundRecovery
+
+    # Verify the class exists and has required methods
+    assert BackgroundRecovery is not None
+    assert hasattr(BackgroundRecovery, '__init__')
+    # Note: Full threading tests would require more complex setup
