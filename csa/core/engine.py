@@ -19,14 +19,23 @@ from ..attention import CompressedAttention, AttentionPatcher
 
 def _get_kv_list(full_kv):
     """Convert DynamicCache or similar to a list of (key, value) tuples."""
-    if isinstance(full_kv, (list, tuple)):
-        return full_kv
+    # Already a list of 2-tuples
+    if isinstance(full_kv, (list, tuple)) and full_kv and len(full_kv[0]) == 2:
+        return list(full_kv)
     # Handle transformers DynamicCache (new API)
     if hasattr(full_kv, 'key_cache') and hasattr(full_kv, 'value_cache'):
-        return list(zip(full_kv.key_cache, full_kv.value_cache))
-    # Fallback: try iterating
+        kc, vc = full_kv.key_cache, full_kv.value_cache
+        if isinstance(kc, (list, tuple)) and isinstance(vc, (list, tuple)):
+            return [(kc[i], vc[i]) for i in range(len(kc))]
+    # Fallback: try iterating and take first 2 elements per item
     try:
-        return list(full_kv)
+        result = []
+        for item in full_kv:
+            if isinstance(item, (list, tuple)) and len(item) >= 2:
+                result.append((item[0], item[1]))
+            else:
+                result.append(item)
+        return result
     except TypeError:
         raise TypeError(f"Unsupported KV cache type: {type(full_kv)}")
 

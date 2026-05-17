@@ -62,14 +62,22 @@ class DynamicHierarchicalCache:
     def initialize(self, full_kv, prefill_scores=None):
         """
         Initialize cache from full KV cache (prefill phase).
-        
+
         Args:
             full_kv: List of (key, value) tuples from prefill
             prefill_scores: Optional dict of {layer_idx: scores} for initial importance
         """
+        # Convert DynamicCache or other formats to list of 2-tuples
+        if not isinstance(full_kv, list) or (full_kv and not isinstance(full_kv[0], tuple)):
+            if hasattr(full_kv, 'key_cache') and hasattr(full_kv, 'value_cache'):
+                kc, vc = full_kv.key_cache, full_kv.value_cache
+                full_kv = [(kc[i], vc[i]) for i in range(len(kc))]
+            else:
+                full_kv = [(item[0], item[1]) for item in full_kv]
+
         # Set seq_len BEFORE the loop so skeleton positions are correct
         self.seq_len = full_kv[0][0].shape[2]
-        
+
         for layer_idx, (k, v) in enumerate(full_kv):
             seq_len = k.shape[2]
             
