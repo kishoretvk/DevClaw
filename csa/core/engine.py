@@ -44,8 +44,8 @@ def _kv_list_to_cache(kv_list):
     """Convert list of (key, value) tuples back to a DynamicCache for model.generate()."""
     from transformers import DynamicCache
     cache = DynamicCache()
-    for k, v in kv_list:
-        cache.update(k, v, 0)
+    for layer_idx, (k, v) in enumerate(kv_list):
+        cache.update(k, v, layer_idx)
     return cache
 
 
