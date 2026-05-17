@@ -8,7 +8,10 @@ Comprehensive profiling tool to identify speed bottlenecks in CSA implementation
 import time
 import torch
 import psutil
-import GPUtil
+try:
+    import GPUtil
+except ImportError:
+    GPUtil = None
 from contextlib import contextmanager
 from typing import Dict, List, Any
 from collections import defaultdict
@@ -128,8 +131,10 @@ class CSAPerformanceProfiler:
         if not self.gpu_available:
             return 0.0
         try:
-            gpu = GPUtil.getGPUs()[0]
-            return gpu.memoryUsed
+            if GPUtil is not None:
+                gpu = GPUtil.getGPUs()[0]
+                return gpu.memoryUsed
+            return torch.cuda.memory_allocated() / 1024 / 1024
         except:
             return 0.0
 
