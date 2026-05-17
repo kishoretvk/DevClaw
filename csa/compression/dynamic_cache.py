@@ -232,11 +232,19 @@ class DynamicHierarchicalCache:
             return
         
         scores = self.detail_scores[layer_idx]
-        
+        # Ensure scores is same length as seq_len
+        if scores.shape[0] != seq_len:
+            if scores.shape[0] < seq_len:
+                padding = torch.zeros(seq_len - scores.shape[0])
+                scores = torch.cat([scores, padding])
+            else:
+                scores = scores[:seq_len]
+            self.detail_scores[layer_idx] = scores
+
         # Keep recent window
         recent_start = seq_len - self.recent_window
         recent_indices = torch.arange(recent_start, seq_len)
-        
+
         # Keep heavy hitters from older tokens
         old_scores = scores[:recent_start]
         if old_scores.shape[0] > self.detail_budget:
@@ -245,7 +253,10 @@ class DynamicHierarchicalCache:
         else:
             # Not enough old tokens to fill budget
             keep_indices = torch.arange(seq_len)
-        
+
+        # Clamp indices to valid range for scores
+        keep_indices = keep_indices.clamp(0, scores.shape[0] - 1)
+
         # Apply eviction
         self.detail_kv[layer_idx] = (
             k_detail[:, :, keep_indices, :],
