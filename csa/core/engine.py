@@ -405,7 +405,7 @@ class CSAEngine:
             # Use L2 norm of key vectors as importance proxy
             # Higher norm = more "active" key = more likely to be attended to
             # Shape: (batch, heads, seq_len, head_dim) -> (seq_len,)
-            scores = torch.norm(key.float(), dim=(0, 1, 3))
+            scores = torch.linalg.vector_norm(key.float(), dim=(0, 1, 3))
             self.dynamic_cache.update(layer_idx, (key, value), scores)
 
         # Get compressed cache
