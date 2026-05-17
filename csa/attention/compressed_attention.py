@@ -134,7 +134,9 @@ class CompressedAttention(torch.nn.Module):
         # Weighted sum of compressed values
         output = torch.matmul(attn_weights, comp_v)
 
-        return output, None  # No new KV to cache
+        # Return compressed KV cache as-is for subsequent generation steps
+        # Returning None would break the cache for the next token
+        return output, (comp_k, comp_v)
 
     def enable_compressed_mode(self):
         """Enable using compressed KV cache."""
