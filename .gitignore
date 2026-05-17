@@ -73,3 +73,11 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+
+# Experimental / leftover
+.agents/
+.qoder/
+team_workspace/
+csa_profile_*.json
+.openclaude/
+.openclaude-profile.json
