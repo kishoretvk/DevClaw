@@ -252,17 +252,9 @@ class CSAEngine:
         if skeleton_kv is not None:
             print("Using COMPRESSED KV cache for generation!")
             print(f"   Passing {len(skeleton_kv)} compressed layers directly to model")
-            # Convert list of tuples to DynamicCache for model.generate()
-            compressed_cache = _kv_list_to_cache(skeleton_kv)
-            # Only pass last token since cache is already pre-filled
-            last_token = input_ids[:, -1:]
             with profile_component("token_generation", {"max_tokens": max_new_tokens, "compressed_cache": True}):
-                generated_ids = self.target_model.generate(
-                    last_token,
-                    max_new_tokens=max_new_tokens,
-                    do_sample=True,
-                    temperature=0.7,
-                    past_key_values=compressed_cache
+                generated_ids = self._generate_with_compressed_cache(
+                    input_ids, skeleton_kv, max_new_tokens
                 )
         else:
             print("Using standard generation (no compressed cache)")
@@ -278,6 +270,46 @@ class CSAEngine:
 
         self.generation_step += 1
         return generated_text
+
+    def _generate_with_compressed_cache(self, input_ids, compressed_kv, max_new_tokens):
+        """Manual token-by-token generation with compressed KV cache.
+
+        Bypasses model.generate() which has issues with DynamicCache format.
+        Uses model() forward pass directly with list-of-tuples KV cache.
+        """
+        generated_tokens = []
+        # Start with last token of input
+        current_token = input_ids[:, -1:]
+        past_kv = list(compressed_kv)  # list of (key, value) tuples
+
+        for _ in range(max_new_tokens):
+            with torch.no_grad():
+                outputs = self.target_model(
+                    current_token,
+                    past_key_values=past_kv,
+                    use_cache=True
+                )
+                past_kv = outputs.past_key_values
+                # Handle DynamicCache returned by model
+                if hasattr(past_kv, 'key_cache'):
+                    past_kv = _get_kv_list(past_kv)
+
+                next_token_logits = outputs.logits[:, -1, :]
+
+                # Sample with temperature
+                probs = torch.softmax(next_token_logits / 0.7, dim=-1)
+                next_token = torch.multinomial(probs, num_samples=1)
+
+                token_id = next_token.item()
+                generated_tokens.append(token_id)
+
+                # Check for EOS
+                if token_id == self.tokenizer.eos_token_id:
+                    break
+
+                current_token = next_token
+
+        return self.tokenizer.decode(generated_tokens, skip_special_tokens=True)
 
     def _full_generate(self, input_ids, max_new_tokens):
         """Full CSA generation with self-speculative decoding (5-10x speedup)."""
@@ -299,68 +331,8 @@ class CSAEngine:
 
         self.skeleton_kv = skeleton_kv
 
-        # Initialize self-speculative decoder (no separate draft model needed)
-        with profile_component("ssd_init"):
-            if SSDSpeculator is not None:
-                self.speculator = SSDSpeculator(
-                    target_model=self.target_model,
-                    num_draft_layers=max(1, self.num_layers // 2),
-                    speculate_k=5,
-                    compression_ratio=50
-                )
-            else:
-                self.speculator = None
-
-        # Generation loop with self-speculative decoding
-        generated_tokens = input_ids[0].tolist()
-        # Convert list of tuples to DynamicCache for model.generate()
-        current_past_kv = _kv_list_to_cache(skeleton_kv)
-        # Start with last token since cache is already pre-filled
-        current_input = input_ids[:, -1:]
-        tokens_generated = 0
-
-        while tokens_generated < max_new_tokens:
-            with profile_component(f"generation_step_{tokens_generated}"):
-                if self.speculator:
-                    # Self-speculative generation
-                    new_tokens = self.speculator.generate_speculative(
-                        current_input,
-                        past_kv=current_past_kv,
-                        max_new_tokens=min(5, max_new_tokens - tokens_generated)
-                    )
-                else:
-                    # Fallback: standard generation
-                    with torch.no_grad():
-                        outputs = self.target_model.generate(
-                            current_input,
-                            max_new_tokens=min(5, max_new_tokens - tokens_generated),
-                            do_sample=True,
-                            temperature=0.7,
-                            past_key_values=current_past_kv,
-                            use_cache=True
-                        )
-                    new_tokens = outputs[0][current_input.shape[1]:].tolist()
-
-                # Append generated tokens
-                for token in new_tokens:
-                    generated_tokens.append(token)
-                    tokens_generated += 1
-                    if tokens_generated >= max_new_tokens:
-                        break
-
-                # Update current input
-                if new_tokens:
-                    new_tensor = torch.tensor(new_tokens, device=current_input.device).unsqueeze(0)
-                    current_input = torch.cat([current_input, new_tensor], dim=1)
-
-        # Decode final result
-        text = self.tokenizer.decode(generated_tokens[len(input_ids[0]):], skip_special_tokens=True)
-
-        # Cleanup
-        if self.speculator:
-            self.speculator.cleanup()
-
-        return text
+        # Use manual generation with compressed cache
+        return self._generate_with_compressed_cache(input_ids, skeleton_kv, max_new_tokens)
 
     def _compress_kv(self, full_kv):
         """Compress KV cache to skeleton using uniform compression."""
