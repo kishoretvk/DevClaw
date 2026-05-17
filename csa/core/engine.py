@@ -40,6 +40,15 @@ def _get_kv_list(full_kv):
         raise TypeError(f"Unsupported KV cache type: {type(full_kv)}")
 
 
+def _kv_list_to_cache(kv_list):
+    """Convert list of (key, value) tuples back to a DynamicCache for model.generate()."""
+    from transformers import DynamicCache
+    cache = DynamicCache()
+    for k, v in kv_list:
+        cache.update(k, v, 0)
+    return cache
+
+
 class CSAEngine:
     """Main engine for CSA acceleration with 50x KV compression and 5-10x speedup."""
 
@@ -242,13 +251,15 @@ class CSAEngine:
         if skeleton_kv is not None:
             print("Using COMPRESSED KV cache for generation!")
             print(f"   Passing {len(skeleton_kv)} compressed layers directly to model")
+            # Convert list of tuples to DynamicCache for model.generate()
+            compressed_cache = _kv_list_to_cache(skeleton_kv)
             with profile_component("token_generation", {"max_tokens": max_new_tokens, "compressed_cache": True}):
                 generated_ids = self.target_model.generate(
                     input_ids,
                     max_new_tokens=max_new_tokens,
                     do_sample=True,
                     temperature=0.7,
-                    past_key_values=skeleton_kv
+                    past_key_values=compressed_cache
                 )
         else:
             print("Using standard generation (no compressed cache)")
@@ -300,7 +311,8 @@ class CSAEngine:
         # Generation loop with self-speculative decoding
         generated_tokens = input_ids[0].tolist()
         current_input = input_ids.clone()
-        current_past_kv = skeleton_kv
+        # Convert list of tuples to DynamicCache for model.generate()
+        current_past_kv = _kv_list_to_cache(skeleton_kv)
         tokens_generated = 0
 
         while tokens_generated < max_new_tokens:
