@@ -47,6 +47,11 @@ def _kv_list_to_cache(kv_list):
     # Directly set cache internals to avoid DynamicCache.update() issues
     cache.key_cache = [k for k, v in kv_list]
     cache.value_cache = [v for k, v in kv_list]
+    # CRITICAL: Set seen_tokens so model.generate() knows the cache has content
+    # Without this, get_seq_length() returns 0 and generation produces empty output
+    if kv_list and kv_list[0][0] is not None:
+        seq_len = kv_list[0][0].shape[2]
+        cache._seen_tokens = seq_len
     return cache
 
 
@@ -102,10 +107,18 @@ class CSAEngine:
             config = self.target_model.config
             num_layers = getattr(config, 'num_hidden_layers',
                                   getattr(config, 'n_layer', 12))
+            # For 50x compression on 424 tokens: need ~9 tokens total
+            # skeleton_budget: uniform position coverage (just indices, not KV)
+            # detail_budget: heavy-hitter tokens at full precision
+            # recent_window: most recent tokens always kept
+            # Total KV tokens kept = detail_budget + recent_window
+            target_tokens = max(8, 512 // compression_ratio)
+            detail = max(4, target_tokens // 2)
+            recent = max(4, target_tokens - detail)
             self.dynamic_cache = DynamicHierarchicalCache(
-                skeleton_budget=max(20, 512 // compression_ratio),
-                detail_budget=max(64, 512 // (compression_ratio // 2)),
-                recent_window=64,
+                skeleton_budget=max(5, target_tokens),
+                detail_budget=detail,
+                recent_window=recent,
                 num_layers=num_layers,
                 skeleton_rebuild_freq=50
             )
@@ -232,10 +245,13 @@ class CSAEngine:
 
         if should_compress:
             print("Compressing KV cache...")
+            t_compress = time.time()
             if self.dynamic_cache and self.use_dynamic_cache:
                 skeleton_kv = self._compress_with_dynamic_cache(full_kv)
             else:
                 skeleton_kv = self._compress_kv(kv_list)
+            self.compression_time = time.time() - t_compress
+            print(f"   Compression took {self.compression_time:.3f}s")
 
             self.skeleton_kv = skeleton_kv
 
@@ -386,9 +402,10 @@ class CSAEngine:
 
         # Update dynamic cache with full KV
         for layer_idx, (key, value) in enumerate(kv_list):
-            # Extract attention scores for importance weighting
-            # Average over batch, heads, dim -> (seq_len,) per-key importance
-            scores = key.mean(dim=(0, 1, 3))  # (seq_len,)
+            # Use L2 norm of key vectors as importance proxy
+            # Higher norm = more "active" key = more likely to be attended to
+            # Shape: (batch, heads, seq_len, head_dim) -> (seq_len,)
+            scores = torch.norm(key.float(), dim=(0, 1, 3))
             self.dynamic_cache.update(layer_idx, (key, value), scores)
 
         # Get compressed cache
