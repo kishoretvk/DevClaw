@@ -132,23 +132,61 @@ class BackgroundRecovery:
     
     def _recover_position(self, position: int) -> Optional[Tuple[torch.Tensor, torch.Tensor]]:
         """
-        Recover KV details for a specific position.
-        
+        Recover KV details for a specific position using residual correction.
+
         Args:
             position: Token position to recover
-            
+
         Returns:
             Recovered (key, value) tensors or None
         """
-        # Simplified recovery: return None for now
-        # Full implementation would:
-        # 1. Extract residual between full and compressed
-        # 2. Apply residual correction
-        # 3. Return corrected KV
-        
-        # Placeholder: simulate some work
-        time.sleep(0.001)
-        
+        if not self.full_kv or not self.skeleton_kv:
+            return None
+
+        try:
+            recovered_keys = []
+            recovered_values = []
+
+            for layer_idx in range(len(self.full_kv)):
+                if layer_idx >= len(self.skeleton_kv):
+                    break
+
+                full_key, full_val = self.full_kv[layer_idx]
+                skel_key, skel_val = self.skeleton_kv[layer_idx]
+
+                if position >= full_key.shape[2]:
+                    continue
+
+                # Get full KV at this position
+                fk = full_key[:, :, position:position+1, :]
+                fv = full_val[:, :, position:position+1, :]
+
+                # Find nearest compressed position
+                comp_len = skel_key.shape[2]
+                comp_pos = min(position * comp_len // full_key.shape[2], comp_len - 1)
+                sk = skel_key[:, :, comp_pos:comp_pos+1, :]
+                sv = skel_val[:, :, comp_pos:comp_pos+1, :]
+
+                # Compute residual and apply correction
+                key_residual = fk - sk
+                val_residual = fv - sv
+
+                # Apply residual with scaling factor
+                scale = 0.5  # Blend factor
+                recovered_k = sk + scale * key_residual
+                recovered_v = sv + scale * val_residual
+
+                recovered_keys.append(recovered_k)
+                recovered_values.append(recovered_v)
+
+            if recovered_keys:
+                return (torch.cat(recovered_keys, dim=0), torch.cat(recovered_values, dim=0))
+
+        except Exception as e:
+            self.recovery_errors += 1
+            if self.recovery_errors <= 3:
+                print(f"Recovery error at position {position}: {e}")
+
         return None
     
     def _compute_residual(self, position: int) -> Optional[Tuple[torch.Tensor, torch.Tensor]]:

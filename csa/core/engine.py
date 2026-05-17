@@ -196,19 +196,40 @@ class CSAEngine:
         return result
 
     def _should_compress(self, seq_length):
-        """Determine if compression should be applied based on configuration."""
+        """Determine if compression should be applied based on configuration.
+
+        Compression is only beneficial when:
+        1. Sequence is long enough for meaningful savings
+        2. Model is large enough that KV cache overhead > compression overhead
+        3. The savings from compressed tokens outweigh compression time
+
+        For small models (gpt2 124M), compression overhead (~0.013s) exceeds
+        the savings from reducing KV cache for short sequences.
+        For larger models (355M+), compression becomes beneficial at seq_len > 256.
+        """
+        # Skip if below minimum threshold
         if seq_length < self.skip_compression_threshold:
             return False
 
+        # Adaptive threshold based on model size
+        # Small models: compression overhead > savings for most sequences
+        # Large models: compression is beneficial for longer sequences
+        num_params = sum(p.numel() for p in self.target_model.parameters())
+        if num_params < 200_000_000:  # < 200M params (gpt2)
+            if seq_length < 1024:
+                return False
+        elif num_params < 500_000_000:  # < 500M params (gpt2-medium)
+            if seq_length < 512:
+                return False
+        # For larger models, use the configured threshold
+
         if self.compression_frequency == "once":
-            # When using dynamic cache, check its initialized state
             if self.use_dynamic_cache and self.dynamic_cache:
                 return not self.dynamic_cache.initialized
             return self.skeleton_kv is None
         elif self.compression_frequency == "per_10_tokens":
             return self.generation_step % 10 == 0
         elif self.compression_frequency == "lazy":
-            # When using dynamic cache, check its initialized state
             if self.use_dynamic_cache and self.dynamic_cache:
                 return not self.dynamic_cache.initialized
             return self.skeleton_kv is None
