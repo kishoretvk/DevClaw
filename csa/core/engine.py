@@ -253,9 +253,11 @@ class CSAEngine:
             print(f"   Passing {len(skeleton_kv)} compressed layers directly to model")
             # Convert list of tuples to DynamicCache for model.generate()
             compressed_cache = _kv_list_to_cache(skeleton_kv)
+            # Only pass last token since cache is already pre-filled
+            last_token = input_ids[:, -1:]
             with profile_component("token_generation", {"max_tokens": max_new_tokens, "compressed_cache": True}):
                 generated_ids = self.target_model.generate(
-                    input_ids,
+                    last_token,
                     max_new_tokens=max_new_tokens,
                     do_sample=True,
                     temperature=0.7,
@@ -310,9 +312,10 @@ class CSAEngine:
 
         # Generation loop with self-speculative decoding
         generated_tokens = input_ids[0].tolist()
-        current_input = input_ids.clone()
         # Convert list of tuples to DynamicCache for model.generate()
         current_past_kv = _kv_list_to_cache(skeleton_kv)
+        # Start with last token since cache is already pre-filled
+        current_input = input_ids[:, -1:]
         tokens_generated = 0
 
         while tokens_generated < max_new_tokens:
