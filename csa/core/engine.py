@@ -214,7 +214,7 @@ class CSAEngine:
         if should_compress:
             print("Compressing KV cache...")
             if self.dynamic_cache and self.use_dynamic_cache:
-                skeleton_kv = self._compress_with_dynamic_cache(kv_list)
+                skeleton_kv = self._compress_with_dynamic_cache(full_kv)
             else:
                 skeleton_kv = self._compress_kv(kv_list)
 
@@ -270,7 +270,7 @@ class CSAEngine:
 
         # Compress to skeleton
         if self.dynamic_cache and self.use_dynamic_cache:
-            skeleton_kv = self._compress_with_dynamic_cache(kv_list)
+            skeleton_kv = self._compress_with_dynamic_cache(full_kv)
         else:
             skeleton_kv = self._compress_kv(kv_list)
 
@@ -350,15 +350,17 @@ class CSAEngine:
     def _compress_with_dynamic_cache(self, full_kv):
         """Compress using DynamicHierarchicalCache for 50x compression."""
         if not self.dynamic_cache:
-            return self._compress_kv(full_kv)
+            return self._compress_kv(_get_kv_list(full_kv))
+
+        # Ensure full_kv is a list of (key, value) tuples
+        kv_list = _get_kv_list(full_kv)
 
         # Initialize cache if not already done
         if not self.dynamic_cache.initialized:
-            self.dynamic_cache.initialize(full_kv)
+            self.dynamic_cache.initialize(kv_list)
 
         # Update dynamic cache with full KV
-        for layer_idx, layer_kv in enumerate(full_kv):
-            key, value = layer_kv
+        for layer_idx, (key, value) in enumerate(kv_list):
             # Extract attention scores for importance weighting
             # Average over batch, heads, dim -> (seq_len,) per-key importance
             scores = key.mean(dim=(0, 1, 3))  # (seq_len,)
