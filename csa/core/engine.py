@@ -12,6 +12,10 @@ try:
     from ..speculation.ssd import SSDSpeculator
 except ImportError:
     SSDSpeculator = None
+try:
+    from ..speculation.mtp import MedusaMTP
+except ImportError:
+    MedusaMTP = None
 from ..recovery import BackgroundRecovery
 from ..profiling import get_profiler, profile_component
 from ..attention import CompressedAttention, AttentionPatcher
@@ -272,42 +276,107 @@ class CSAEngine:
         return generated_text
 
     def _generate_with_compressed_cache(self, input_ids, compressed_kv, max_new_tokens):
-        """Manual token-by-token generation with compressed KV cache.
+        """Generate with compressed KV cache using MTP parallel prediction.
 
-        Bypasses model.generate() which has issues with DynamicCache format.
-        Uses model() forward pass directly with list-of-tuples KV cache.
+        Uses Medusa-style auxiliary heads to predict K tokens in parallel,
+        then verifies against target model. Falls back to token-by-token
+        if MTP is not available.
         """
         generated_tokens = []
-        # Start with last token of input
         current_token = input_ids[:, -1:]
-        past_kv = list(compressed_kv)  # list of (key, value) tuples
+        past_kv = list(compressed_kv)
 
-        for _ in range(max_new_tokens):
-            with torch.no_grad():
-                outputs = self.target_model(
-                    current_token,
-                    past_key_values=past_kv,
-                    use_cache=True
-                )
-                past_kv = outputs.past_key_values
-                # Handle DynamicCache returned by model
-                if hasattr(past_kv, 'key_cache'):
-                    past_kv = _get_kv_list(past_kv)
+        # Try to use MTP for parallel prediction
+        mtp = None
+        if MedusaMTP is not None:
+            try:
+                mtp = MedusaMTP(self.target_model, num_heads=3)
+                print("   Using MTP parallel prediction (3 heads)")
+            except Exception:
+                mtp = None
 
-                next_token_logits = outputs.logits[:, -1, :]
+        if mtp is not None:
+            # MTP path: draft K tokens in parallel, verify, accept
+            tokens_generated = 0
+            while tokens_generated < max_new_tokens:
+                # Draft K tokens in parallel
+                draft_input = torch.cat([
+                    input_ids[:, :-1],  # Original input without last token
+                    current_token.unsqueeze(0) if current_token.dim() == 1 else current_token
+                ], dim=1) if len(generated_tokens) == 0 else current_token
 
-                # Sample with temperature
-                probs = torch.softmax(next_token_logits / 0.7, dim=-1)
-                next_token = torch.multinomial(probs, num_samples=1)
+                draft_tokens = mtp.draft_parallel(draft_input, temperature=0.7)
 
-                token_id = next_token.item()
-                generated_tokens.append(token_id)
-
-                # Check for EOS
-                if token_id == self.tokenizer.eos_token_id:
+                if not draft_tokens:
                     break
 
-                current_token = next_token
+                # Verify against target model
+                accepted, num_accepted, new_past_kv = mtp.verify(
+                    current_token if len(generated_tokens) > 0 else input_ids[:, -1:],
+                    draft_tokens,
+                    past_kv
+                )
+
+                # Accept contiguous prefix
+                for token in accepted:
+                    generated_tokens.append(token)
+                    tokens_generated += 1
+                    if tokens_generated >= max_new_tokens:
+                        break
+                    if token == self.tokenizer.eos_token_id:
+                        break
+
+                # Update state
+                if num_accepted > 0:
+                    accepted_tensor = torch.tensor(accepted, device=input_ids.device).unsqueeze(0)
+                    current_token = accepted_tensor
+                    past_kv = new_past_kv
+                    if hasattr(past_kv, 'key_cache'):
+                        past_kv = _get_kv_list(past_kv)
+
+                # If no tokens accepted, fall back to single token
+                if num_accepted == 0:
+                    with torch.no_grad():
+                        outputs = self.target_model(
+                            current_token,
+                            past_key_values=past_kv,
+                            use_cache=True
+                        )
+                        past_kv = outputs.past_key_values
+                        if hasattr(past_kv, 'key_cache'):
+                            past_kv = _get_kv_list(past_kv)
+                        next_token = torch.argmax(outputs.logits[:, -1, :], dim=-1)
+                        token_id = next_token.item()
+                        generated_tokens.append(token_id)
+                        tokens_generated += 1
+                        current_token = next_token.unsqueeze(0) if next_token.dim() == 1 else next_token
+
+                if generated_tokens and generated_tokens[-1] == self.tokenizer.eos_token_id:
+                    break
+        else:
+            # Fallback: sequential token-by-token generation
+            for _ in range(max_new_tokens):
+                with torch.no_grad():
+                    outputs = self.target_model(
+                        current_token,
+                        past_key_values=past_kv,
+                        use_cache=True
+                    )
+                    past_kv = outputs.past_key_values
+                    if hasattr(past_kv, 'key_cache'):
+                        past_kv = _get_kv_list(past_kv)
+
+                    next_token_logits = outputs.logits[:, -1, :]
+                    probs = torch.softmax(next_token_logits / 0.7, dim=-1)
+                    next_token = torch.multinomial(probs, num_samples=1)
+
+                    token_id = next_token.item()
+                    generated_tokens.append(token_id)
+
+                    if token_id == self.tokenizer.eos_token_id:
+                        break
+
+                    current_token = next_token
 
         return self.tokenizer.decode(generated_tokens, skip_special_tokens=True)
 
