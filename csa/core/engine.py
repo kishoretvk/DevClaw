@@ -139,27 +139,11 @@ class CSAEngine:
         self.speculator = None
         self.recovery = None
 
-        # Patch model with CompressedAttention for direct compressed cache usage
-        print("Patching model attention for compressed cache support...")
-        try:
-            self.patched_layers = AttentionPatcher.patch_model(
-                self.target_model,
-                compression_ratio=compression_ratio,
-                device=str(self.device)
-            )
-            print(f"   Patched {len(self.patched_layers)} attention layers")
-
-            # Enable compressed mode on patched layers
-            print("   Enabling compressed mode...")
-            for item in self.patched_layers:
-                layer = item[1] if isinstance(item, tuple) else item
-                if hasattr(layer, 'enable_compressed_mode'):
-                    layer.enable_compressed_mode()
-            print("   Compressed attention ready for generation!")
-
-        except ValueError as e:
-            print(f"   Could not patch model: {e}")
-            self.patched_layers = []
+        # NOTE: CompressedAttention patching is disabled because it conflicts
+        # with model.generate() when using DynamicCache. The compressed KV cache
+        # is passed directly to model.generate() via DynamicCache instead.
+        self.patched_layers = []
+        print("   Using DynamicCache-based compression (no attention patching)")
 
     def generate(self, prompt, max_new_tokens=100, enable_profiling=False):
         """
